@@ -31,14 +31,17 @@ const CLIENT_STEPS = [
 
 export function GuidePage({ isTrainer = true, plan = "premium" }) {
   const [, setTourDismissed] = useLS("ts_tour_dismissed", false);
+  const [, setTourForced] = useLS("ts_tour_forced", false);
   const [open, setOpen] = useState(null);
+  // Reabrir el tour de forma explícita: se muestra aunque el onboarding esté completo.
+  function reopenTour() { setTourDismissed(false); setTourForced(true); }
   const steps = isTrainer ? TRAINER_STEPS : CLIENT_STEPS;
   const p = normalizePlan(plan);
 
   return (
     <div>
       <div className="ph"><div><div className="pt">Guía {isTrainer ? "para el Trainer" : "rápida"}</div><div className="ps">Todo lo que podés hacer en TrainSync</div></div>
-        {isTrainer && <button className="btn btn-p" onClick={() => setTourDismissed(false)}>▶ Reabrir tour</button>}
+        {isTrainer && <button className="btn btn-p" onClick={reopenTour}>▶ Reabrir tour</button>}
       </div>
 
       <div className="card" style={{ padding: 0, marginBottom: 14 }}>

@@ -609,6 +609,38 @@ export async function setOrgReminderConfig(orgId, { enabled, daysBefore }) {
   if (error) throw error;
 }
 
+// ── Administradores / co-entrenadores de la organización ──────────
+// Lista los miembros con rol owner/trainer (los "admins") con su nombre de perfil.
+export async function getOrgAdmins(orgId) {
+  if (!orgId) return [];
+  const { data: members, error } = await sb
+    .from("organization_members")
+    .select("user_id, role, created_at")
+    .eq("organization_id", orgId)
+    .in("role", ["owner", "trainer"])
+    .order("created_at");
+  if (error) throw error;
+  const ids = (members || []).map((m) => m.user_id);
+  const names = {};
+  if (ids.length) {
+    const { data: p } = await sb.from("profiles").select("id, full_name").in("id", ids);
+    for (const x of p || []) names[x.id] = x.full_name;
+  }
+  return (members || []).map((m) => ({ userId: m.user_id, role: m.role, name: names[m.user_id] || null }));
+}
+
+// Quita a un co-entrenador de la organización. Nunca borra al owner (principal):
+// se restringe a role='trainer'. Solo el owner puede ejecutarlo (RLS members_write).
+export async function removeOrgAdmin(orgId, userId) {
+  const { error } = await sb
+    .from("organization_members")
+    .delete()
+    .eq("organization_id", orgId)
+    .eq("user_id", userId)
+    .eq("role", "trainer");
+  if (error) throw error;
+}
+
 export async function getCatalogs() {
   const { data, error } = await sb
     .from("catalogs")

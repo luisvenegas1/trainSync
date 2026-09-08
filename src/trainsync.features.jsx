@@ -8,8 +8,8 @@ import { useCatalogs, CATALOG_META } from "./trainsync.catalogs";
 import { usePermissions } from "./auth/PermissionsContext";
 import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanStatusFromEndDate, initials, planColor, useLS, hashPassword, generatePassword, useSaving, weekKey, weekLabel, monthKey, monthLabel, dayKey, fmtDuration, convertWeight } from "./trainsync.utils";
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
-import { updateOwnPassword, resetClientPassword, inviteClient } from "./auth/authClient";
-import { setClientReminder } from "./db";
+import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer } from "./auth/authClient";
+import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
 import { PlanGate } from "./plans/PlanGate";
@@ -126,45 +126,73 @@ export function CatalogEditor(){
 }
 
 // ── ADMINS PAGE ──
-export function AdminsPage({user}){
+// Administradores/co-entrenadores REALES: miembros de la organización (owner/trainer).
+// El alta es por invitación de correo (Edge Function invite-trainer); el nuevo admin
+// crea su propia contraseña. Solo el owner (principal) puede agregar/quitar.
+export function AdminsPage(){
   const{readOnly}=usePermissions();
-  const[admins,setAdmins]=useLS("jh_admins_v3",[]);
+  const tenant=useTenant();
+  const orgId=tenant?.org?.id||null;
+  const[admins,setAdmins]=useState([]);
+  const[loading,setLoading]=useState(true);
   const[showAdd,setShowAdd]=useState(false);
-  const[form,setForm]=useState({name:"",username:"",password:""});
+  const[form,setForm]=useState({name:"",email:""});
   const[err,setErr]=useState("");
+  const[busy,setBusy]=useState(false);
+  const[toast,setToast]=useState(null);
 
-  function add(){
-    if(readOnly)return;
-    if(!form.name||!form.username||!form.password){setErr("Todos los campos son requeridos");return}
-    if(form.username==="johel"||admins.some(a=>a.username===form.username)){setErr("Ese usuario ya existe");return}
-    setAdmins([...admins,{id:genId(),...form,role:"trainer"}]);setForm({name:"",username:"",password:""});setErr("");setShowAdd(false);
+  async function reload(){
+    if(!orgId){setLoading(false);return;}
+    try{const list=await getOrgAdmins(orgId);setAdmins(list);}
+    catch(e){console.error("getOrgAdmins:",e);}
+    finally{setLoading(false);}
   }
-  function del(id){if(readOnly)return;if(!confirm("¿Eliminar administrador?"))return;setAdmins(admins.filter(a=>a.id!==id))}
+  useEffect(()=>{let alive=true;(async()=>{await Promise.resolve();if(alive)await reload();})();return()=>{alive=false;};// eslint-disable-next-line react-hooks/exhaustive-deps
+  },[orgId]);
+
+  async function add(){
+    if(readOnly)return;
+    const email=form.email.trim().toLowerCase();
+    if(!form.name.trim()||!email){setErr("Nombre y correo son requeridos");return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setErr("Correo inválido");return;}
+    setErr("");setBusy(true);
+    const res=await inviteTrainer(email,form.name.trim());
+    setBusy(false);
+    if(!res.ok){setErr(res.error||"No se pudo invitar. Intentá de nuevo.");return;}
+    setForm({name:"",email:""});setShowAdd(false);
+    setToast({msg:res.data?.already_member?"Esa persona ya era miembro de la organización.":"Invitación enviada. El nuevo admin recibirá un correo para crear su contraseña.",type:"ok"});
+    reload();
+  }
+  async function del(a){
+    if(readOnly||a.role==="owner")return;
+    if(!confirm("¿Quitar a este administrador de la organización?"))return;
+    try{await removeOrgAdmin(orgId,a.userId);setToast({msg:"Administrador removido",type:"ok"});reload();}
+    catch(e){console.error(e);setToast({msg:"No se pudo remover: "+(e?.message||e),type:"err"});}
+  }
 
   return(<div>
-    <div className="ph"><div><div className="pt">Administradores</div><div className="ps">Perfiles con acceso de entrenador</div></div>{!readOnly&&<button className="btn btn-p" onClick={()=>setShowAdd(true)}>+ Nuevo admin</button>}</div>
+    {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
+    <div className="ph"><div><div className="pt">Administradores</div><div className="ps">Perfiles con acceso de entrenador a esta organización</div></div>{!readOnly&&<button className="btn btn-p" onClick={()=>{setForm({name:"",email:""});setErr("");setShowAdd(true);}}>+ Nuevo admin</button>}</div>
     <div className="card" style={{padding:0}}>
       <div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Rol</th><th></th></tr></thead>
         <tbody>
-          <tr><td><strong>{user?.name||"Entrenador"}</strong></td><td>{user?.username&&user.username!==user.name?"@"+user.username:"—"}</td><td><span className="badge bd-blue">Principal</span></td><td></td></tr>
-          {admins.map(a=>(<tr key={a.id}>
-            <td><strong>{a.name}</strong></td><td>@{a.username}</td>
-            <td><span className="badge bd-gray">Administrador</span></td>
-            <td><button className="ibtn d" onClick={()=>del(a.id)}>🗑</button></td>
+          {loading&&<tr><td colSpan={3} style={{textAlign:"center",color:"#6B7A99",padding:20,fontSize:12}}>Cargando…</td></tr>}
+          {!loading&&admins.map(a=>(<tr key={a.userId}>
+            <td><strong>{a.name||"(sin nombre)"}</strong></td>
+            <td>{a.role==="owner"?<span className="badge bd-blue">Principal</span>:<span className="badge bd-gray">Administrador</span>}</td>
+            <td>{a.role!=="owner"&&!readOnly&&<button className="ibtn d" onClick={()=>del(a)}>🗑</button>}</td>
           </tr>))}
-          {admins.length===0&&<tr><td colSpan={4} style={{textAlign:"center",color:"#6B7A99",padding:20,fontSize:12}}>Sin administradores adicionales</td></tr>}
+          {!loading&&admins.length===0&&<tr><td colSpan={3} style={{textAlign:"center",color:"#6B7A99",padding:20,fontSize:12}}>Sin administradores</td></tr>}
         </tbody>
       </table></div>
     </div>
-    {showAdd&&<Modal title="Nuevo administrador" onClose={()=>setShowAdd(false)}>
+    {showAdd&&<Modal title="Invitar administrador" onClose={()=>setShowAdd(false)}>
       {err&&<div className="err">{err}</div>}
+      <div style={{fontSize:12,color:"#6B7A99",marginBottom:10}}>Le enviaremos un correo para que cree su propia contraseña y quede como co-entrenador de tu organización.</div>
       <div className="fg"><label>Nombre completo</label><input className="inp" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ej: Ana Pérez"/></div>
-      <div className="fr2">
-        <div className="fg"><label>Usuario</label><input className="inp" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="ana.perez"/></div>
-        <div className="fg"><label>Contraseña</label><PasswordInput value={form.password} onChange={e=>setForm({...form,password:e.target.value})} autoComplete="new-password"/></div>
-      </div>
-      <div style={{display:"flex",gap:8}}><button className="btn btn-p" onClick={add}>Crear</button><button className="btn btn-g" onClick={()=>setShowAdd(false)}>Cancelar</button></div>
+      <div className="fg"><label>Correo</label><input className="inp" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="ana@correo.com" autoComplete="off"/></div>
+      <div style={{display:"flex",gap:8}}><button className="btn btn-p" onClick={add} disabled={busy}>{busy?"Enviando…":"Enviar invitación"}</button><button className="btn btn-g" onClick={()=>setShowAdd(false)}>Cancelar</button></div>
     </Modal>}
     <CatalogEditor/>
   </div>);

@@ -4,7 +4,16 @@ import { useLS } from "../trainsync.utils";
 // se puede cerrar y reabrir desde la Guía. Marca pasos hechos según datos reales.
 export function OnboardingTour({ onGo, clientsCount = 0, routinesCount = 0 }) {
   const [dismissed, setDismissed] = useLS("ts_tour_dismissed", false);
-  if (dismissed) return null;
+  const [forced, setForced] = useLS("ts_tour_forced", false);
+  // El onboarding se considera completo cuando el entrenador ya tiene al menos un
+  // cliente y una rutina. En ese caso NO se muestra solo (un trainer ya establecido,
+  // como Johel, no lo ve). Solo aparece la primera vez (sin datos) o si se reabre
+  // explícitamente desde la Guía (forced).
+  const onboardingComplete = clientsCount > 0 && routinesCount > 0;
+  const show = forced || (!dismissed && !onboardingComplete);
+  if (!show) return null;
+
+  function close() { setDismissed(true); setForced(false); }
 
   const steps = [
     { n: 1, label: "Agregá tu primer cliente", done: clientsCount > 0, go: "clients" },
@@ -22,7 +31,7 @@ export function OnboardingTour({ onGo, clientsCount = 0, routinesCount = 0 }) {
           <div style={{ fontWeight: 900, color: "#0B1F4B", fontSize: 16 }}>👋 Bienvenido a TrainSync</div>
           <div style={{ fontSize: 12, color: "#64748B" }}>Primeros pasos ({doneCount}/{steps.length})</div>
         </div>
-        <button className="btn btn-g btn-sm" onClick={() => setDismissed(true)}>Cerrar</button>
+        <button className="btn btn-g btn-sm" onClick={close}>Cerrar</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {steps.map((s) => (
