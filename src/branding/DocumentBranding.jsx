@@ -33,11 +33,12 @@ export function DocumentBranding({ branding }) {
     addLink("apple-touch-icon", icon);
     addLink("apple-touch-icon-precomposed", icon);
 
-    // 2) Manifest: se calcula el tamaño REAL del ícono para que Chrome lo acepte al
-    //    instalar (declarar un tamaño equivocado hace que lo rechace y use el de Tito).
+    // 2) Manifest por tenant. Para íconos por URL http(s) usamos un manifest servido
+    //    desde /api/manifest (iOS NO usa manifests generados en el navegador). Para
+    //    íconos data: (logo por defecto) se usa el blob (sirve en Android).
     const img = new Image();
-    img.onload = () => injectManifest({ name, icon, type, w: img.naturalWidth || 512, h: img.naturalHeight || 512, branding });
-    img.onerror = () => injectManifest({ name, icon, type, w: 512, h: 512, branding });
+    img.onload = () => setManifest({ name, icon, type, w: img.naturalWidth || 512, h: img.naturalHeight || 512, branding });
+    img.onerror = () => setManifest({ name, icon, type, w: 512, h: 512, branding });
     img.src = icon;
   }, [branding]);
 
@@ -83,19 +84,27 @@ function setMeta(name, content) {
   el.setAttribute("content", content);
 }
 
-// Genera un manifest por tenant como Blob y lo enlaza. start_url/scope absolutos
-// (un blob no resuelve rutas relativas contra la página). Íconos con tamaño y tipo
-// reales para que el navegador los use al "Instalar app".
+// Base del tenant según la URL actual: en tenants por RUTA (trainingapp.../joheltraining)
+// el ícono instalado debe abrir /joheltraining, no la raíz. En subdominio la ruta ya es "/".
+function tenantBase() {
+  const segs = window.location.pathname.split("/").filter(Boolean);
+  return segs.length ? `/${segs[0]}/` : "/";
+}
+
 let lastBlobUrl = null;
-function injectManifest({ name, icon, type, w, h, branding }) {
+function setManifest({ name, icon, type, w, h, branding }) {
+  const base = tenantBase();
+  const color = branding?.secondaryColor || "#0B1F4B";
+  const size = `${w}x${h}`;
+  // Ícono por URL http(s) → manifest servido desde /api/manifest (compatible con iOS).
+  if (/^https?:\/\//i.test(icon)) {
+    const p = new URLSearchParams({ name: name || "App", icon, color, start: base, size, type });
+    setLinkSingle("manifest", "/api/manifest?" + p.toString());
+    return;
+  }
+  // Ícono data: (logo por defecto) → manifest blob (sirve en Android/Chrome).
   try {
     const origin = window.location.origin;
-    const size = `${w}x${h}`;
-    // Base del tenant según la URL actual: en tenants por RUTA (trainingapp.../joheltraining)
-    // el ícono instalado debe abrir /joheltraining, no la raíz. En tenants por
-    // subdominio la ruta ya es "/" y queda igual.
-    const segs = window.location.pathname.split("/").filter(Boolean);
-    const base = segs.length ? `/${segs[0]}/` : "/";
     const manifest = {
       id: origin + base,
       name: name || "Entrenamiento",
@@ -104,8 +113,8 @@ function injectManifest({ name, icon, type, w, h, branding }) {
       start_url: origin + base,
       scope: origin + base,
       display: "standalone",
-      background_color: branding?.secondaryColor || "#0B1F4B",
-      theme_color: branding?.secondaryColor || "#0B1F4B",
+      background_color: color,
+      theme_color: color,
       orientation: "portrait",
       icons: [
         { src: icon, sizes: size, type, purpose: "any" },
