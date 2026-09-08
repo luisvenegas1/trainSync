@@ -39,9 +39,11 @@ create policy trainerphotos_read on storage.objects for select
 drop policy if exists trainerphotos_write on storage.objects;
 create policy trainerphotos_write on storage.objects for all to authenticated
   using (bucket_id = 'trainer-photos'
-         and public.can_write_org(((storage.foldername(name))[1])::uuid))
+         and (public.is_superadmin()
+              or public.can_write_org(((storage.foldername(name))[1])::uuid)))
   with check (bucket_id = 'trainer-photos'
-         and public.can_write_org(((storage.foldername(name))[1])::uuid));
+         and (public.is_superadmin()
+              or public.can_write_org(((storage.foldername(name))[1])::uuid)));
 
 -- ── avatars (privado): miembros de la org o el propio cliente ──
 --    Ruta: <org_id>/<client_id>/<archivo>

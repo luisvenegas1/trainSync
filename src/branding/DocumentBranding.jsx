@@ -91,13 +91,18 @@ function injectManifest({ name, icon, type, w, h, branding }) {
   try {
     const origin = window.location.origin;
     const size = `${w}x${h}`;
+    // Base del tenant según la URL actual: en tenants por RUTA (trainingapp.../joheltraining)
+    // el ícono instalado debe abrir /joheltraining, no la raíz. En tenants por
+    // subdominio la ruta ya es "/" y queda igual.
+    const segs = window.location.pathname.split("/").filter(Boolean);
+    const base = segs.length ? `/${segs[0]}/` : "/";
     const manifest = {
-      id: origin + "/",
+      id: origin + base,
       name: name || "Entrenamiento",
-      short_name: (name || "App").slice(0, 12),
+      short_name: (name || "App").slice(0, 18),
       description: "Tu plataforma de entrenamiento",
-      start_url: origin + "/",
-      scope: origin + "/",
+      start_url: origin + base,
+      scope: origin + base,
       display: "standalone",
       background_color: branding?.secondaryColor || "#0B1F4B",
       theme_color: branding?.secondaryColor || "#0B1F4B",
