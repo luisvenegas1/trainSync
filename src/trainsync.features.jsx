@@ -8,7 +8,7 @@ import { useCatalogs, CATALOG_META } from "./trainsync.catalogs";
 import { usePermissions } from "./auth/PermissionsContext";
 import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanStatusFromEndDate, initials, planColor, useLS, hashPassword, generatePassword, useSaving, weekKey, weekLabel, monthKey, monthLabel, dayKey, fmtDuration, convertWeight } from "./trainsync.utils";
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
-import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer } from "./auth/authClient";
+import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer } from "./auth/authClient";
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
@@ -85,7 +85,21 @@ export function CatalogEditor(){
   const[newVal,setNewVal]=useState("");
   const[busy,setBusy]=useState(false);
   const[toast,setToast]=useState(null);
+  const[editKey,setEditKey]=useState(null); // `${dbCat}|${item}` en edición
+  const[editVal,setEditVal]=useState("");
   const ERR="No se pudo guardar. ¿Corriste supabase-catalogos.sql? Intentá de nuevo.";
+  async function renameItem(m,oldItem){
+    if(readOnly)return;
+    const v=editVal.trim();
+    setEditKey(null);
+    if(!v||v===oldItem)return; // sin cambios
+    // Evitar duplicado con OTRO item existente.
+    if(cat[m.key].some(x=>x!==oldItem&&x.toLowerCase()===v.toLowerCase())){setToast({msg:`Ya existe "${v}" en ${m.label}`,type:"err"});return;}
+    setBusy(true);
+    try{await cat.saveCategory(m.dbCat,cat[m.key].map(x=>x===oldItem?v:x));setToast({msg:"Lista actualizada",type:"ok"});}
+    catch(e){console.error(e);setToast({msg:ERR,type:"err"});}
+    finally{setBusy(false);}
+  }
   async function addItem(m){
     if(readOnly)return;
     const v=newVal.trim();
@@ -109,10 +123,19 @@ export function CatalogEditor(){
     {CATALOG_META.map(m=>(<div key={m.key} style={{padding:"10px 0",borderTop:"1px solid #DDE4F0"}}>
       <div style={{fontSize:12,fontWeight:700,color:"#0B1F4B",marginBottom:6}}>{m.label}</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
-        {cat[m.key].map(item=>(<span key={item} className="badge bd-gray" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 9px",textTransform:"none",fontSize:11}}>
-          {item}
-          {!readOnly&&item!=="Ninguno"&&<button onClick={()=>removeItem(m,item)} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",color:"#E53935",fontWeight:700,padding:0,lineHeight:1,fontSize:13}}>✕</button>}
-        </span>))}
+        {cat[m.key].map(item=>(editKey===`${m.dbCat}|${item}`?(
+          <span key={item} style={{display:"inline-flex",gap:4,alignItems:"center"}}>
+            <input className="inp" autoFocus value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")renameItem(m,item);if(e.key==="Escape")setEditKey(null);}} style={{width:140,minHeight:34,fontSize:12}}/>
+            <button className="btn btn-ok btn-sm" onClick={()=>renameItem(m,item)} disabled={busy}>✓</button>
+            <button className="btn btn-g btn-sm" onClick={()=>setEditKey(null)}>✕</button>
+          </span>
+        ):(
+          <span key={item} className="badge bd-gray" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 9px",textTransform:"none",fontSize:11}}>
+            {item}
+            {!readOnly&&item!=="Ninguno"&&<button onClick={()=>{setEditKey(`${m.dbCat}|${item}`);setEditVal(item);}} title="Editar" style={{background:"none",border:"none",cursor:"pointer",color:"#1A5DC8",fontWeight:700,padding:0,lineHeight:1,fontSize:12}}>✎</button>}
+            {!readOnly&&item!=="Ninguno"&&<button onClick={()=>removeItem(m,item)} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",color:"#E53935",fontWeight:700,padding:0,lineHeight:1,fontSize:13}}>✕</button>}
+          </span>
+        )))}
         {!readOnly&&(adding===m.dbCat?(<span style={{display:"inline-flex",gap:4,alignItems:"center"}}>
           <input className="inp" autoFocus value={newVal} onChange={e=>setNewVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addItem(m);if(e.key==="Escape"){setAdding(null);setNewVal("");}}} placeholder="Nuevo..." style={{width:140,minHeight:34,fontSize:12}}/>
           <button className="btn btn-ok btn-sm" onClick={()=>addItem(m)} disabled={busy}>✓</button>
@@ -140,6 +163,8 @@ export function AdminsPage(){
   const[err,setErr]=useState("");
   const[busy,setBusy]=useState(false);
   const[toast,setToast]=useState(null);
+  const[editing,setEditing]=useState(null);
+  const[eForm,setEForm]=useState({name:"",pwd:""});
 
   async function reload(){
     if(!orgId){setLoading(false);return;}
@@ -169,6 +194,23 @@ export function AdminsPage(){
     try{await removeOrgAdmin(orgId,a.userId);setToast({msg:"Administrador removido",type:"ok"});reload();}
     catch(e){console.error(e);setToast({msg:"No se pudo remover: "+(e?.message||e),type:"err"});}
   }
+  function openEdit(a){setEditing(a);setEForm({name:a.name||"",pwd:""});setErr("");}
+  async function saveEdit(){
+    if(readOnly||!editing)return;
+    setErr("");setBusy(true);
+    try{
+      if(eForm.name.trim()&&eForm.name.trim()!==(editing.name||"")){
+        const r=await manageTrainer({action:"update_name",targetUserId:editing.userId,name:eForm.name.trim()});
+        if(!r.ok){setBusy(false);setErr(r.error||"No se pudo actualizar el nombre.");return;}
+      }
+      if(eForm.pwd){
+        if(eForm.pwd.length<8){setBusy(false);setErr("La contraseña debe tener al menos 8 caracteres.");return;}
+        const r=await manageTrainer({action:"reset_password",targetUserId:editing.userId,newPassword:eForm.pwd});
+        if(!r.ok){setBusy(false);setErr(r.error||"No se pudo cambiar la contraseña.");return;}
+      }
+      setBusy(false);setEditing(null);setToast({msg:"Administrador actualizado",type:"ok"});reload();
+    }catch(e){setBusy(false);setErr(String(e?.message||e));}
+  }
 
   return(<div>
     {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
@@ -181,7 +223,7 @@ export function AdminsPage(){
           {!loading&&admins.map(a=>(<tr key={a.userId}>
             <td><strong>{a.name||"(sin nombre)"}</strong></td>
             <td>{a.role==="owner"?<span className="badge bd-blue">Principal</span>:<span className="badge bd-gray">Administrador</span>}</td>
-            <td>{a.role!=="owner"&&!readOnly&&<button className="ibtn d" onClick={()=>del(a)}>🗑</button>}</td>
+            <td style={{textAlign:"right",whiteSpace:"nowrap"}}>{a.role!=="owner"&&!readOnly&&<><button className="ibtn" title="Editar" onClick={()=>openEdit(a)}>✏️</button> <button className="ibtn d" title="Quitar" onClick={()=>del(a)}>🗑</button></>}</td>
           </tr>))}
           {!loading&&admins.length===0&&<tr><td colSpan={3} style={{textAlign:"center",color:"#6B7A99",padding:20,fontSize:12}}>Sin administradores</td></tr>}
         </tbody>
@@ -193,6 +235,16 @@ export function AdminsPage(){
       <div className="fg"><label>Nombre completo</label><input className="inp" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Ej: Ana Pérez"/></div>
       <div className="fg"><label>Correo</label><input className="inp" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="ana@correo.com" autoComplete="off"/></div>
       <div style={{display:"flex",gap:8}}><button className="btn btn-p" onClick={add} disabled={busy}>{busy?"Enviando…":"Enviar invitación"}</button><button className="btn btn-g" onClick={()=>setShowAdd(false)}>Cancelar</button></div>
+    </Modal>}
+    {editing&&<Modal title="Editar administrador" onClose={()=>setEditing(null)}>
+      {err&&<div className="err">{err}</div>}
+      <div className="fg"><label>Nombre</label><input className="inp" value={eForm.name} onChange={e=>setEForm({...eForm,name:e.target.value})}/></div>
+      <div className="fg"><label>Nueva contraseña (opcional)</label>
+        <PasswordInput value={eForm.pwd} onChange={e=>setEForm({...eForm,pwd:e.target.value})} autoComplete="new-password"/>
+        <div style={{marginTop:6}}><button type="button" className="btn btn-s btn-sm" onClick={()=>setEForm(f=>({...f,pwd:generatePassword()}))}>🔑 Generar</button></div>
+        <div style={{fontSize:11,color:"#6B7A99",marginTop:4}}>Dejala en blanco si no querés cambiarla. Si la cambiás, compartísela al admin de forma segura.</div>
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:10}}><button className="btn btn-p" onClick={saveEdit} disabled={busy}>{busy?"Guardando…":"Guardar"}</button><button className="btn btn-g" onClick={()=>setEditing(null)}>Cancelar</button></div>
     </Modal>}
     <CatalogEditor/>
   </div>);
