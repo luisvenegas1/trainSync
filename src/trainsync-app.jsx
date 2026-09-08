@@ -25,6 +25,7 @@ import { AboutPage } from "./onboarding/AboutPage";
 import { GuidePage } from "./onboarding/GuidePage";
 import { RemindersPage } from "./reminders/RemindersPage";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
+import { DemoTopBar } from "./demo/DemoTopBar";
 
 // Modo de autenticación. Por defecto LEGACY: la app se comporta EXACTAMENTE como
 // hoy. VITE_AUTH_MODE=supabase activa el login por Supabase Auth (no se elimina el
@@ -143,7 +144,7 @@ function useAppData() {
 }
 
 // ── Shell autenticado (idéntico para ambos modos) ───────────────
-function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSuperadmin = false, plan = "premium" }) {
+function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSuperadmin = false, plan = "premium", demoControls = null }) {
   const [page, setPage] = useState(currentUser.role === "trainer" ? "dashboard" : "my-routine");
   const isT = currentUser.role === "trainer";
   const liveUser = isT ? currentUser : (data.users.find((u) => u.id === currentUser.id) || currentUser);
@@ -172,7 +173,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
         <div className="app">
           <Sidebar user={liveUser} page={page} setPage={setPage} onLogout={onLogout} isSuperadmin={isSuperadmin} />
           <main className="main">
-            {readOnly && <DemoBanner />}
+            {readOnly && (demoControls ? <DemoTopBar {...demoControls} currentUser={currentUser} /> : <DemoBanner />)}
             {isT && !readOnly && <OnboardingTour onGo={setPage} clientsCount={data.users.filter((u) => u.role !== "trainer").length} routinesCount={data.routines.length} />}
             {content}
             <AppFooter />
@@ -210,6 +211,39 @@ function LegacyApp() {
   return <MainApp currentUser={currentUser} onLogout={logout} data={data} />;
 }
 
+// ── Raíz DEMO (tenant demo, SIN login) ──────────────────────────
+// Entra directo en modo solo lectura y permite alternar Coach ↔ Cliente.
+// La lectura anónima de datos la habilita la migración 0028 (solo la org demo).
+function DemoApp() {
+  const data = useAppData();
+  const { load } = data;
+  const [viewClientId, setViewClientId] = useState(null); // null = vista Coach
+
+  useEffect(() => { load(); }, [load]);
+
+  if (data.loading) return <LoadingScreen />;
+  if (data.dbError) return <DbErrorScreen msg={data.dbError} />;
+
+  const clients = data.users.filter((u) => u.role !== "trainer");
+  const coachUser = { id: "demo-coach", role: "trainer", name: "Coach (demo)" };
+  const clientUser = viewClientId ? (clients.find((c) => c.id === viewClientId) || clients[0]) : null;
+  const currentUser = clientUser || coachUser;
+
+  // key: al alternar Coach/Cliente (o entre clientes) se remonta MainApp para que
+  // la página inicial sea la correcta de ese perfil. El estado del switch vive acá.
+  return (
+    <MainApp
+      key={viewClientId || "coach"}
+      currentUser={currentUser}
+      capabilityRole="demo_viewer"
+      plan="premium"
+      data={data}
+      onLogout={() => { try { window.location.reload(); } catch { /* ignore */ } }}
+      demoControls={{ viewClientId, setViewClientId, clients }}
+    />
+  );
+}
+
 // ── Raíz SUPABASE (login real por Auth; el legacy sigue disponible) ──
 function SupabaseApp() {
   const tenant = useTenant();
@@ -234,8 +268,12 @@ function SupabaseApp() {
 
   useEffect(() => { if (ready) load(); }, [ready, load]);
 
+  // Tenant demo SIN sesión → app de demostración pública (sin login, solo lectura).
+  const isDemoTenant = tenant?.org?.tenant_type === "demo" || tenant?.slug === "titotrainer";
+
   if (recovery) return (<><style>{STYLES}</style><SetNewPasswordScreen onDone={() => { try { window.__authFlow = null; } catch { /* ignore */ } setRecovery(false); }} /></>);
   if (auth.status === "loading") return <AuthLoading />;
+  if (isDemoTenant && auth.status === "anonymous") return <DemoApp />;
   if (auth.status === "anonymous") return (<><style>{STYLES}</style><SupabaseLogin onSubmit={auth.signIn} formError={auth.formError} /></>);
   if (!ready) return (<><style>{STYLES}</style><AuthErrorScreen kind={auth.status} slug={tenant?.slug} onLogout={auth.signOut} /></>);
   // Suscripción de la org: si está bloqueada, no se carga NINGÚN dato operativo

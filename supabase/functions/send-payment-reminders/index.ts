@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
 
   const { data: settings } = await admin
     .from("organization_settings")
-    .select("organization_id, reminders_enabled, reminders_days_before")
+    .select("organization_id, reminders_enabled, reminders_days_before, display_name, logo_url, primary_color, secondary_color")
     .in("organization_id", premiumOrgIds)
     .eq("reminders_enabled", true);
 
@@ -66,6 +66,12 @@ Deno.serve(async (req) => {
     summary.orgs++;
     const daysBefore = Number(st.reminders_days_before) || 3;
     const target = isoPlus(daysBefore);
+    // Branding del tenant: cada org envía el correo con su logo, nombre y color.
+    const brand = {
+      name: st.display_name || "TrainSync",
+      logo: st.logo_url || "",
+      primary: st.primary_color || "#0B1F4B",
+    };
 
     // 3-4) Clientes de la org con recordatorio activo, email y vencimiento == target.
     const { data: clients } = await admin
@@ -94,7 +100,7 @@ Deno.serve(async (req) => {
 
       // 6) Enviar y registrar resultado.
       try {
-        await sendEmail(c.email, c.name || "", due, daysBefore);
+        await sendEmail(c.email, c.name || "", due, daysBefore, brand);
         await admin.from("payment_reminder_logs").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", logId);
         summary.sent++;
       } catch (e) {
@@ -107,23 +113,38 @@ Deno.serve(async (req) => {
   return json({ ok: true, ...summary });
 });
 
-async function sendEmail(to: string, name: string, dueDate: string, daysBefore: number) {
+type Brand = { name: string; logo: string; primary: string };
+
+// Toma el correo verificado de REMINDER_FROM y le pone el nombre del tenant como
+// remitente visible (la dirección/dominio no cambia: sigue siendo el verificado).
+function fromForBrand(orgName: string): string {
+  const m = REMINDER_FROM.match(/<([^>]+)>/);
+  const addr = m ? m[1] : REMINDER_FROM;
+  return `${orgName} <${addr}>`;
+}
+
+async function sendEmail(to: string, name: string, dueDate: string, daysBefore: number, brand: Brand) {
   if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY no configurada");
+  const primary = brand?.primary || "#0B1F4B";
+  const orgName = brand?.name || "TrainSync";
+  const header = brand?.logo
+    ? `<img src="${brand.logo}" alt="${escapeHtml(orgName)}" style="max-height:52px;max-width:200px;object-fit:contain"/>`
+    : `<span style="color:#fff;font-weight:800;letter-spacing:1px;font-size:20px">${escapeHtml(orgName)}</span>`;
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#F1F5F9;padding:24px">
     <div style="max-width:440px;margin:0 auto;background:#fff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden">
-      <div style="background:#0B1F4B;padding:24px;text-align:center;color:#fff;font-weight:800;letter-spacing:1px">TrainSync</div>
+      <div style="background:${primary};padding:22px;text-align:center">${header}</div>
       <div style="padding:28px">
-        <div style="font-size:20px;font-weight:800;color:#0B1F4B;margin-bottom:8px">Recordatorio de pago</div>
-        <p style="font-size:14px;color:#475569;line-height:1.6">Hola ${escapeHtml(name)}, te recordamos que tu mensualidad vence el <strong>${escapeHtml(dueDate)}</strong> (en ${daysBefore} día${daysBefore === 1 ? "" : "s"}). Coordiná el pago con tu entrenador para no perder el acceso.</p>
-        <p style="font-size:12px;color:#94A3B8;margin-top:16px">Este es un recordatorio automático.</p>
+        <div style="font-size:20px;font-weight:800;color:${primary};margin-bottom:8px">Recordatorio de pago</div>
+        <p style="font-size:14px;color:#475569;line-height:1.6">Hola ${escapeHtml(name)}, te recordamos que tu mensualidad con <strong>${escapeHtml(orgName)}</strong> vence el <strong>${escapeHtml(dueDate)}</strong> (en ${daysBefore} día${daysBefore === 1 ? "" : "s"}). Coordiná el pago con tu entrenador para no perder el acceso.</p>
+        <p style="font-size:12px;color:#94A3B8;margin-top:16px">Este es un recordatorio automático enviado a través de TrainSync.</p>
       </div>
     </div>
   </div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: REMINDER_FROM, to, subject: "Recordatorio: tu mensualidad vence pronto", html }),
+    body: JSON.stringify({ from: fromForBrand(orgName), to, subject: `Recordatorio: tu mensualidad con ${orgName} vence pronto`, html }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
