@@ -15,6 +15,46 @@ export function AuthLoading({ label = "Verificando sesión…" }) {
 }
 
 // Login real con Supabase Auth (email + contraseña). No lee usuarios/hashes.
+// Enlaces de contacto normalizados a partir del branding del tenant.
+function waLink(v) { const d = String(v || "").replace(/\D/g, ""); return d ? `https://wa.me/${d}` : null; }
+function igLink(v) { if (!v) return null; const s = String(v).trim(); return /^https?:\/\//i.test(s) ? s : `https://instagram.com/${s.replace(/^@/, "")}`; }
+
+// "Sobre el entrenador" — panel manejado por el BRANDING del tenant (foto, bio,
+// contacto). Solo muestra los campos que la organización tenga configurados.
+function SobreTrainer({ brand, onClose }) {
+  const wa = waLink(brand.whatsapp);
+  const ig = igLink(brand.instagram);
+  const mail = brand.contactEmail ? `mailto:${brand.contactEmail}` : null;
+  return (
+    <div className="mb" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(11,31,75,0.55)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="mo" style={{ maxWidth: 540, width: "100%", borderRadius: 20, background: "#fff", padding: 22, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "#0B1F4B" }}>Sobre {brand.displayName || "el entrenador"}</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#6B7A99" }}>✕</button>
+        </div>
+        {brand.trainerPhotoUrl && (
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <img src={brand.trainerPhotoUrl} alt={brand.displayName} style={{ width: 160, height: 200, objectFit: "cover", objectPosition: "top", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }} />
+          </div>
+        )}
+        {brand.bio && (
+          <div style={{ fontSize: 13, color: "#0D1B3E", lineHeight: 1.65, marginBottom: 16, whiteSpace: "pre-line" }}>{brand.bio}</div>
+        )}
+        {(brand.callToAction || wa || ig || mail) && (
+          <div style={{ background: "#F5F7FC", borderRadius: 10, padding: "12px 14px" }}>
+            {brand.callToAction && <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7A99", textAlign: "center", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>{brand.callToAction}</div>}
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+              {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ background: "#25D366", color: "#fff", padding: "10px 18px", borderRadius: 9, fontWeight: 700, fontSize: 13, textDecoration: "none" }}>WhatsApp</a>}
+              {ig && <a href={ig} target="_blank" rel="noreferrer" style={{ background: "linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)", color: "#fff", padding: "10px 18px", borderRadius: 9, fontWeight: 700, fontSize: 13, textDecoration: "none" }}>Instagram</a>}
+              {mail && <a href={mail} style={{ background: "#0B1F4B", color: "#fff", padding: "10px 18px", borderRadius: 9, fontWeight: 700, fontSize: 13, textDecoration: "none" }}>Correo</a>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SupabaseLogin({ onSubmit, formError }) {
   const brand = useBranding();
   const [email, setEmail] = useState("");
@@ -23,6 +63,8 @@ export function SupabaseLogin({ onSubmit, formError }) {
   const [forgot, setForgot] = useState(false); // vista "olvidé mi contraseña"
   const [resetMsg, setResetMsg] = useState(null);
   const [resetErr, setResetErr] = useState(null);
+  const [showSobre, setShowSobre] = useState(false);
+  const hasTrainerInfo = !!(brand.bio || brand.trainerPhotoUrl || brand.contactEmail || brand.whatsapp || brand.instagram);
 
   async function submit(e) {
     e.preventDefault();
@@ -51,6 +93,7 @@ export function SupabaseLogin({ onSubmit, formError }) {
 
   return (
     <div className="login-page">
+      {showSobre && <SobreTrainer brand={brand} onClose={() => setShowSobre(false)} />}
       <div className="login-box">
         <div className="login-logo">
           {brand.logoUrl && <img src={brand.logoUrl} alt={brand.displayName} style={{ width: 120, height: 120, objectFit: "contain", display: "block", margin: "0 auto 10px" }} />}
@@ -65,6 +108,13 @@ export function SupabaseLogin({ onSubmit, formError }) {
             <button className="btn btn-p btn-full" type="submit" style={{ marginTop: 8 }} disabled={busy}>{busy ? "Ingresando…" : "Ingresar →"}</button>
           </form>
           <button type="button" onClick={() => { setForgot(true); setResetMsg(null); setResetErr(null); }} style={{ background: "none", border: "none", color: "#1A5DC8", fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 12, display: "block", width: "100%", textAlign: "center" }}>¿Olvidaste tu contraseña?</button>
+          {hasTrainerInfo && (
+            <div style={{ textAlign: "center", marginTop: 14, paddingTop: 14, borderTop: "1px solid #DDE4F0" }}>
+              <button type="button" onClick={() => setShowSobre(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#1A5DC8", fontSize: 13, fontWeight: 700, textDecoration: "underline", padding: 0 }}>
+                Sobre {brand.displayName || "el entrenador"} →
+              </button>
+            </div>
+          )}
         </>)}
         {forgot && (<>
           <div style={{ fontSize: 13, color: "#6B7A99", marginBottom: 10 }}>Escribí tu correo y te enviamos un enlace para crear una nueva contraseña.</div>
