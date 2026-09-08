@@ -29,10 +29,34 @@
 
 
   <script>
+    // Registro del service worker con AUTO-ACTUALIZACIÓN: cuando se despliega una
+    // versión nueva, se detecta y la página se recarga sola una vez, para que el
+    // usuario nunca quede viendo una versión vieja cacheada.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('SW registrado:', reg.scope))
+          .then(reg => {
+            // Buscar actualizaciones al cargar y cada vez que la pestaña vuelve al frente.
+            reg.update();
+            document.addEventListener('visibilitychange', () => {
+              if (document.visibilityState === 'visible') reg.update();
+            });
+            // Cuando entra un worker nuevo y termina de instalarse, si YA había uno
+            // controlando (es decir, es una actualización, no la primera visita),
+            // recargamos UNA vez para tomar la versión nueva. En la primera visita
+            // (controller null) no recarga, así no hay parpadeo.
+            let reloaded = false;
+            reg.addEventListener('updatefound', () => {
+              const nw = reg.installing;
+              if (!nw) return;
+              nw.addEventListener('statechange', () => {
+                if (nw.state === 'installed' && navigator.serviceWorker.controller && !reloaded) {
+                  reloaded = true;
+                  window.location.reload();
+                }
+              });
+            });
+          })
           .catch(err => console.log('SW error:', err));
       });
     }
