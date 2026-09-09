@@ -108,6 +108,8 @@ function dbToRoutine(r, days) {
     note: r.note || "",
     warmupStretchIds: r.warmup_stretch_ids || [],
     cooldownStretchIds: r.cooldown_stretch_ids || [],
+    warmupMode: r.warmup_mode === "image" ? "image" : "exercises",
+    warmupImageUrl: r.warmup_image_url || "",
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     days: (days || [])
@@ -376,6 +378,8 @@ async function upsertRoutineLegacy(routine) {
       note: routine.note || null,
       warmup_stretch_ids: routine.warmupStretchIds || [],
       cooldown_stretch_ids: routine.cooldownStretchIds || [],
+      warmup_mode: routine.warmupMode === "image" ? "image" : "exercises",
+      warmup_image_url: routine.warmupImageUrl || null,
       created_at: routine.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },

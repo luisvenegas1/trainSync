@@ -49,6 +49,24 @@ describe("buildRoutinePayload", () => {
     expect(p.days).toEqual([]);
     expect(p.warmup_stretch_ids).toEqual([]);
   });
+
+  // Compatibilidad hacia atrás: rutinas existentes (sin warmupMode) → 'exercises'.
+  it("calentamiento por defecto es 'exercises' (rutinas viejas no cambian)", () => {
+    const p = buildRoutinePayload(routine); // no tiene warmupMode
+    expect(p.warmup_mode).toBe("exercises");
+    expect(p.warmup_image_url).toBeNull();
+  });
+
+  it("calentamiento por imagen cuando warmupMode='image'", () => {
+    const p = buildRoutinePayload({ ...routine, warmupMode: "image", warmupImageUrl: "https://x/y.png" });
+    expect(p.warmup_mode).toBe("image");
+    expect(p.warmup_image_url).toBe("https://x/y.png");
+  });
+
+  it("cualquier valor raro de warmupMode cae en 'exercises' (defensivo)", () => {
+    const p = buildRoutinePayload({ ...routine, warmupMode: "otro" });
+    expect(p.warmup_mode).toBe("exercises");
+  });
 });
 
 describe("isMissingFunctionError", () => {

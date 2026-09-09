@@ -10,6 +10,8 @@ export function buildRoutinePayload(routine) {
     note: routine.note || null,
     warmup_stretch_ids: routine.warmupStretchIds || [],
     cooldown_stretch_ids: routine.cooldownStretchIds || [],
+    warmup_mode: routine.warmupMode === "image" ? "image" : "exercises",
+    warmup_image_url: routine.warmupImageUrl || null,
     created_at: routine.createdAt || null,
     days: (routine.days || []).map((d) => ({
       id: d.id,

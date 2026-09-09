@@ -10,6 +10,7 @@ import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanSta
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
 import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer } from "./auth/authClient";
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
+import { uploadRoutineImage } from "./storage/storage";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
 import { PlanGate } from "./plans/PlanGate";
@@ -1031,7 +1032,10 @@ function propagateExerciseData(rt){
 export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=false}){
   const cat=useCatalogs();
   const{readOnly}=usePermissions();
-  const blank={id:genId(),userId:"",title:"Nueva Rutina",daysPerWeek:0,note:"",days:[],warmupStretchIds:[],cooldownStretchIds:[],assignedUserIds:[]};
+  const tenant=useTenant();
+  const orgId=tenant?.org?.id||null;
+  const[wUploading,setWUploading]=useState(false);
+  const blank={id:genId(),userId:"",title:"Nueva Rutina",daysPerWeek:0,note:"",days:[],warmupStretchIds:[],cooldownStretchIds:[],warmupMode:"exercises",warmupImageUrl:"",assignedUserIds:[]};
   const[rt,setRt]=useState(()=>{
     if(!routine)return blank;
     const copy=JSON.parse(JSON.stringify(routine));
@@ -1077,6 +1081,14 @@ export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=fals
   function removeEx(di,gi,ei){setRt(r=>{const days=r.days.map((d,i)=>i!==di?d:{...d,groups:d.groups.map((g,j)=>j!==gi?g:{...g,exercises:g.exercises.filter((_,k)=>k!==ei)})});return{...r,days}})}
   function updEx(di,gi,ei,k,v){setRt(r=>{const days=r.days.map((d,i)=>i!==di?d:{...d,groups:d.groups.map((g,j)=>j!==gi?g:{...g,exercises:g.exercises.map((e,k2)=>k2!==ei?e:{...e,[k]:v})})});return{...r,days}})}
   function toggleStretch(kind,id){const key=kind==="warmup"?"warmupStretchIds":"cooldownStretchIds";setRt(r=>{const arr=r[key]||[];return{...r,[key]:arr.includes(id)?arr.filter(x=>x!==id):[...arr,id]}});}
+  async function uploadWarmupImg(file){
+    if(!file||readOnly)return;
+    if(!orgId){alert("No se pudo determinar la organización para subir la imagen.");return;}
+    setWUploading(true);
+    try{const url=await uploadRoutineImage(orgId,rt.id,file);setRt(r=>({...r,warmupImageUrl:url,warmupMode:"image"}));}
+    catch(e){console.error(e);alert("No se pudo subir la imagen: "+(e?.message||e));}
+    finally{setWUploading(false);}
+  }
 
   const day=rt.days[selDay];
   const warmupIds=rt.warmupStretchIds||[];
@@ -1115,7 +1127,20 @@ export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=fals
         <div className="fg"><label>Nota general</label><input className="inp" value={rt.note||""} onChange={e=>setRt(r=>({...r,note:e.target.value}))} placeholder="Instrucciones para el cliente..."/></div>
       </div>
       <div className="fr2">
-        <div className="fg"><label>🧘 Calentamiento ({warmupIds.length})</label><button className="btn btn-s btn-sm" onClick={()=>setStrPicker("warmup")}>Configurar</button>{warmupIds.length>0&&<div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>{warmupIds.map(id=>{const ex=exercises.find(e=>e.id===id);return ex&&<span key={id} className="badge bd-green">{ex.name}</span>})}</div>}</div>
+        <div className="fg"><label>🧘 Calentamiento</label>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <button type="button" className={`btn btn-sm ${rt.warmupMode!=="image"?"btn-p":"btn-s"}`} onClick={()=>setRt(r=>({...r,warmupMode:"exercises"}))}>Ejercicios</button>
+            <button type="button" className={`btn btn-sm ${rt.warmupMode==="image"?"btn-p":"btn-s"}`} onClick={()=>setRt(r=>({...r,warmupMode:"image"}))}>Imagen</button>
+          </div>
+          {rt.warmupMode==="image"?(<div>
+            {rt.warmupImageUrl&&<div style={{marginBottom:6}}><img src={rt.warmupImageUrl} alt="Calentamiento" style={{maxWidth:"100%",maxHeight:160,borderRadius:8,border:"1px solid #DDE4F0",display:"block"}}/></div>}
+            {!readOnly&&<label className="btn btn-s btn-sm" style={{cursor:"pointer"}}>{wUploading?"Subiendo…":(rt.warmupImageUrl?"Cambiar imagen":"📷 Subir imagen")}<input type="file" accept="image/*" style={{display:"none"}} onChange={e=>uploadWarmupImg(e.target.files&&e.target.files[0])}/></label>}
+            {rt.warmupImageUrl&&!readOnly&&<button type="button" className="btn btn-g btn-sm" style={{marginLeft:6}} onClick={()=>setRt(r=>({...r,warmupImageUrl:""}))}>Quitar</button>}
+          </div>):(<>
+            <button type="button" className="btn btn-s btn-sm" onClick={()=>setStrPicker("warmup")}>Configurar ejercicios ({warmupIds.length})</button>
+            {warmupIds.length>0&&<div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>{warmupIds.map(id=>{const ex=exercises.find(e=>e.id===id);return ex&&<span key={id} className="badge bd-green">{ex.name}</span>})}</div>}
+          </>)}
+        </div>
         <div className="fg"><label>🧘 Enfriamiento ({cooldownIds.length})</label><button className="btn btn-s btn-sm" onClick={()=>setStrPicker("cooldown")}>Configurar</button>{cooldownIds.length>0&&<div style={{marginTop:6,display:"flex",flexWrap:"wrap",gap:4}}>{cooldownIds.map(id=>{const ex=exercises.find(e=>e.id===id);return ex&&<span key={id} className="badge bd-teal">{ex.name}</span>})}</div>}</div>
       </div>
     </div>
@@ -1411,7 +1436,10 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
   const cooldownIds=routine.cooldownStretchIds||[];
   return(<div>
     {routine.note&&<div className="note-box"><span>📝</span><span>{routine.note}</span></div>}
-    {warmupIds.length>0&&(<div className="card" style={{marginBottom:12,background:"#E8F5E9",border:"1px solid #C8E6C9"}}>
+    {routine.warmupMode==="image"&&routine.warmupImageUrl?(<div className="card" style={{marginBottom:12,background:"#E8F5E9",border:"1px solid #C8E6C9"}}>
+      <div style={{fontWeight:700,fontSize:12,color:"#2E7D32",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🧘 Calentamiento</div>
+      <a href={routine.warmupImageUrl} target="_blank" rel="noreferrer"><img src={routine.warmupImageUrl} alt="Calentamiento" style={{maxWidth:"100%",borderRadius:8,display:"block"}}/></a>
+    </div>):warmupIds.length>0&&(<div className="card" style={{marginBottom:12,background:"#E8F5E9",border:"1px solid #C8E6C9"}}>
       <div style={{fontWeight:700,fontSize:12,color:"#2E7D32",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🧘 Calentamiento (20 seg c/u)</div>
       {warmupIds.map((id,i)=>{const ex=exercises.find(e=>e.id===id);return ex&&(<div key={id} style={{fontSize:13,padding:"6px 0",borderBottom:"1px solid #C8E6C9",display:"flex",alignItems:"center",gap:6}}><span style={{color:"#2E7D32",fontWeight:700}}>{i+1}.</span><span style={{flex:1}}>{ex.name}</span>{ex.videoUrl&&<button className="vbtn" onClick={()=>setVideoEx(ex)}>▶</button>}</div>);})}
     </div>)}

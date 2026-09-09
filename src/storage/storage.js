@@ -3,7 +3,7 @@
 // fallback para no hacer desaparecer las existentes.
 import { sb } from "../supabase";
 
-const BUCKET = { LOGO: "org-logos", TRAINER: "trainer-photos", AVATAR: "avatars" };
+const BUCKET = { LOGO: "org-logos", TRAINER: "trainer-photos", AVATAR: "avatars", ROUTINE: "routine-images" };
 
 export function publicUrl(bucket, path) {
   return sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -21,6 +21,14 @@ export async function uploadTrainerPhoto(orgId, file) {
   const { error } = await sb.storage.from(BUCKET.TRAINER).upload(path, file, { upsert: true });
   if (error) throw error;
   return publicUrl(BUCKET.TRAINER, path);
+}
+
+// Imagen de calentamiento de una rutina: bucket PÚBLICO. Ruta <org_id>/<routine_id>/...
+export async function uploadRoutineImage(orgId, routineId, file) {
+  const path = `${orgId}/${routineId}/warmup_${Date.now()}`;
+  const { error } = await sb.storage.from(BUCKET.ROUTINE).upload(path, file, { upsert: true });
+  if (error) throw error;
+  return publicUrl(BUCKET.ROUTINE, path);
 }
 
 // Avatares de clientes: bucket PRIVADO. Ruta <org_id>/<client_id>/...
