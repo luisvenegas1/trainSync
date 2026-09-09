@@ -41,11 +41,19 @@ function MultiTenant({ children }) {
         { defaultSlug: import.meta.env.VITE_DEFAULT_TENANT_SLUG }
       );
       if (!slug) {
+        // Red de seguridad: si la PWA (o un acceso directo) abrió en la RAÍZ sin
+        // tenant, pero ya usamos una organización antes, redirigimos a ella. Evita
+        // "Organización no encontrada" cuando el ícono instalado quedó apuntando a "/".
+        let last = null;
+        try { last = localStorage.getItem("ts_last_tenant"); } catch { /* ignore */ }
+        if (last) { window.location.replace("/" + last); return; }
         if (alive) setState({ loading: false, status: "not_found", slug: null });
         return;
       }
       try {
         const r = await loadTenantBySlug(slug);
+        // Recordar el último tenant válido para la red de seguridad de arriba.
+        if (r.status === "ok" && r.slug) { try { localStorage.setItem("ts_last_tenant", r.slug); } catch { /* ignore */ } }
         if (alive) setState({ loading: false, ...r });
       } catch {
         if (alive) setState({ loading: false, status: "error", slug });
