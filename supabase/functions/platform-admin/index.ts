@@ -144,12 +144,13 @@ async function createOrganization(admin: SB, actor: string, body: SB) {
     ownerId = existingUser.id;
     steps.owner_user = "exists";
   } else {
-    // Redirigir la invitación a la URL de SU organización (por ruta, sirve para
-    // cualquier org sin DNS propio). Debe estar en la lista de Redirect URLs.
-    const appBase = Deno.env.get("APP_BASE_URL") || "https://trainingapp.tito-apps.com";
+    // Redirigir la invitación al SUBDOMINIO de SU organización (slug.tito-apps.com):
+    // al instalar la PWA desde el correo abre el tenant correcto (robusto en iOS).
+    // El wildcard https://*.tito-apps.com debe estar en la lista de Redirect URLs.
+    const rootDomain = Deno.env.get("APP_ROOT_DOMAIN") || "tito-apps.com";
     const inv = await admin.auth.admin.inviteUserByEmail(ownerEmail, {
       data: { full_name: ownerName },
-      redirectTo: `${appBase}/${slug}`,
+      redirectTo: slug ? `https://${slug}.${rootDomain}` : `https://trainingapp.${rootDomain}`,
     });
     if (inv.error) {
       // No dejar la org "a medias" en silencio: reportar dónde falló para reintentar.

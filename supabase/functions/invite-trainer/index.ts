@@ -62,8 +62,10 @@ Deno.serve(async (req) => {
 
     // Slug de la org para redirigir la invitación a su login.
     const { data: org } = await admin.from("organizations").select("slug").eq("id", orgId).maybeSingle();
-    const appBase = Deno.env.get("APP_BASE_URL") || "https://trainingapp.tito-apps.com";
-    const redirectTo = `${appBase}/${org?.slug || ""}`;
+    // Link del correo por SUBDOMINIO del tenant (slug.tito-apps.com), no por ruta:
+    // así al instalar la PWA desde el correo, abre el tenant correcto (robusto en iOS).
+    const rootDomain = Deno.env.get("APP_ROOT_DOMAIN") || "tito-apps.com";
+    const redirectTo = org?.slug ? `https://${org.slug}.${rootDomain}` : `https://trainingapp.${rootDomain}`;
 
     // Buscar el usuario Auth por correo; si no existe, invitarlo.
     let authId: string | null = null;
