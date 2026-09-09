@@ -1431,6 +1431,7 @@ export function GroupTimer({restSeconds}){
 export function RoutineDisplay({routine,exercises,renderDayAction}){
   const[openDays,setOpenDays]=useState({});
   const[videoEx,setVideoEx]=useState(null);
+  const[imgZoom,setImgZoom]=useState(null);
   function toggleDay(id){setOpenDays(s=>({...s,[id]:!s[id]}))}
   const warmupIds=routine.warmupStretchIds||[];
   const cooldownIds=routine.cooldownStretchIds||[];
@@ -1438,7 +1439,10 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
     {routine.note&&<div className="note-box"><span>📝</span><span>{routine.note}</span></div>}
     {routine.warmupMode==="image"&&routine.warmupImageUrl?(<div className="card" style={{marginBottom:12,background:"#E8F5E9",border:"1px solid #C8E6C9"}}>
       <div style={{fontWeight:700,fontSize:12,color:"#2E7D32",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🧘 Calentamiento</div>
-      <a href={routine.warmupImageUrl} target="_blank" rel="noreferrer"><img src={routine.warmupImageUrl} alt="Calentamiento" style={{maxWidth:"100%",borderRadius:8,display:"block"}}/></a>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <img src={routine.warmupImageUrl} alt="Calentamiento" onClick={()=>setImgZoom(routine.warmupImageUrl)} style={{height:90,width:90,objectFit:"cover",borderRadius:8,border:"1px solid #C8E6C9",cursor:"zoom-in",display:"block"}}/>
+        <button type="button" onClick={()=>setImgZoom(routine.warmupImageUrl)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E7D32",fontSize:12,fontWeight:700,padding:0,textAlign:"left"}}>🔍 Tocá para ver en grande</button>
+      </div>
     </div>):warmupIds.length>0&&(<div className="card" style={{marginBottom:12,background:"#E8F5E9",border:"1px solid #C8E6C9"}}>
       <div style={{fontWeight:700,fontSize:12,color:"#2E7D32",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>🧘 Calentamiento (20 seg c/u)</div>
       {warmupIds.map((id,i)=>{const ex=exercises.find(e=>e.id===id);return ex&&(<div key={id} style={{fontSize:13,padding:"6px 0",borderBottom:"1px solid #C8E6C9",display:"flex",alignItems:"center",gap:6}}><span style={{color:"#2E7D32",fontWeight:700}}>{i+1}.</span><span style={{flex:1}}>{ex.name}</span>{ex.videoUrl&&<button className="vbtn" onClick={()=>setVideoEx(ex)}>▶</button>}</div>);})}
@@ -1491,6 +1495,10 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
       {cooldownIds.map((id,i)=>{const ex=exercises.find(e=>e.id===id);return ex&&(<div key={id} style={{fontSize:13,padding:"6px 0",borderBottom:"1px solid #BBDEFB",display:"flex",alignItems:"center",gap:6}}><span style={{color:"#1A5DC8",fontWeight:700}}>{i+1}.</span><span style={{flex:1}}>{ex.name}</span>{ex.videoUrl&&<button className="vbtn" onClick={()=>setVideoEx(ex)}>▶</button>}</div>);})}
     </div>)}
     {videoEx&&<VideoModal name={videoEx.name} url={videoEx.videoUrl} onClose={()=>setVideoEx(null)}/>}
+    {imgZoom&&<div onClick={()=>setImgZoom(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <button type="button" onClick={()=>setImgZoom(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:22,width:40,height:40,borderRadius:20,cursor:"pointer"}}>✕</button>
+      <img src={imgZoom} alt="Calentamiento" onClick={e=>e.stopPropagation()} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:10}}/>
+    </div>}
   </div>);
 }
 
