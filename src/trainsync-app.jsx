@@ -8,6 +8,7 @@ import {
   getWorkoutSessions, upsertWorkoutSession, deleteWorkoutSession,
   getCatalogs, setCatalogCategory,
   getChallenges, saveChallenge as dbSaveChallenge, deleteChallenge as dbDeleteChallenge,
+  setDataOrgScope,
 } from "./db";
 import { CatalogContext, buildCatalogValue } from "./trainsync.catalogs";
 import { STYLES } from "./trainsync.styles";
@@ -216,7 +217,7 @@ function LegacyApp() {
     try { const s = localStorage.getItem("jh_session"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setDataOrgScope(null); load(); }, [load]);
 
   // Refrescar la sesión del cliente con datos actualizados de Supabase.
   useEffect(() => {
@@ -261,11 +262,12 @@ function SuperAdminApp({ auth, data, tenant }) {
 // Entra directo en modo solo lectura y permite alternar Coach ↔ Cliente.
 // La lectura anónima de datos la habilita la migración 0028 (solo la org demo).
 function DemoApp() {
+  const tenant = useTenant();
   const data = useAppData();
   const { load } = data;
   const [viewClientId, setViewClientId] = useState(null); // null = vista Coach
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { setDataOrgScope(tenant?.org?.id || null); load(); }, [load, tenant]);
 
   if (data.loading) return <LoadingScreen />;
   if (data.dbError) return <DbErrorScreen msg={data.dbError} />;
@@ -312,7 +314,9 @@ function SupabaseApp() {
     return () => sub?.subscription?.unsubscribe();
   }, []);
 
-  useEffect(() => { if (ready) load(); }, [ready, load]);
+  // Acota TODAS las lecturas a la org del tenant actual antes de cargar. Clave para
+  // el superadmin (RLS le deja ver todo): así solo ve los datos del tenant que abre.
+  useEffect(() => { if (ready) { setDataOrgScope(tenant?.org?.id || null); load(); } }, [ready, load, tenant]);
 
   // Tenant demo SIN sesión → app de demostración pública (sin login, solo lectura).
   const isDemoTenant = tenant?.org?.tenant_type === "demo" || tenant?.slug === "titotrainer";

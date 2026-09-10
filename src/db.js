@@ -1,6 +1,16 @@
 import { sb } from "./supabase";
 import { buildRoutinePayload, isMissingFunctionError } from "./routines/routinePayload";
 
+// ── Alcance de tenant para las LECTURAS ──────────────────────────
+// Todas las consultas de datos se filtran por la organización del tenant actual.
+// Para usuarios normales, RLS ya devuelve solo su org (el filtro es redundante y
+// seguro). Para el SUPERADMIN (god-mode), RLS le deja ver TODAS las orgs, así que
+// este filtro es lo que evita que vea datos de otro tenant al entrar a uno: las
+// pantallas muestran solo la org que está viendo. Defensa en profundidad.
+let ORG_SCOPE = null;
+export function setDataOrgScope(orgId) { ORG_SCOPE = orgId || null; }
+function scopeOrg(q) { return ORG_SCOPE ? q.eq("organization_id", ORG_SCOPE) : q; }
+
 // Se habilita SOLO después de aplicar la migración 0013 (columna users.avatar_url).
 // Por defecto apagado: así userToDb no intenta escribir una columna inexistente y
 // el modo legacy sigue funcionando.
@@ -210,7 +220,7 @@ function paymentToDb(p) {
 // ═══════════════════════════════════════════
 
 export async function getUsers() {
-  const { data, error } = await sb.from("users").select("*");
+  const { data, error } = await scopeOrg(sb.from("users").select("*"));
   if (error) throw error;
   return data.map(dbToUser);
 }
@@ -232,10 +242,11 @@ export async function deleteUser(id) {
 // ═══════════════════════════════════════════
 
 export async function getExercises() {
-  const { data, error } = await sb
-    .from("exercises")
-    .select("*")
-    .order("name");
+  // Ejercicios de la org + los globales. El filtro por org solo importa para el
+  // superadmin (RLS ya limita a los normales); mantiene visibles los globales.
+  let q = sb.from("exercises").select("*");
+  if (ORG_SCOPE) q = q.or(`organization_id.eq.${ORG_SCOPE},visibility.eq.global`);
+  const { data, error } = await q.order("name");
   if (error) throw error;
   return data.map(dbToExercise);
 }
@@ -257,11 +268,12 @@ export async function deleteExercise(id) {
 // ═══════════════════════════════════════════
 
 export async function getRoutines() {
-  // 1. Traer todas las rutinas
-  const { data: routines, error: rErr } = await sb
+  // 1. Traer todas las rutinas (de la org actual; días/grupos/ejercicios se
+  //    encadenan por id, así que basta con acotar las rutinas).
+  const { data: routines, error: rErr } = await scopeOrg(sb
     .from("routines")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }));
   if (rErr) throw rErr;
   if (!routines.length) return [];
 
@@ -443,10 +455,10 @@ export async function deleteRoutine(id) {
 // ═══════════════════════════════════════════
 
 export async function getMeasurements() {
-  const { data, error } = await sb
+  const { data, error } = await scopeOrg(sb
     .from("measurements")
     .select("*")
-    .order("date", { ascending: false });
+    .order("date", { ascending: false }));
   if (error) throw error;
   return data.map(dbToMeasurement);
 }
@@ -468,10 +480,10 @@ export async function deleteMeasurement(id) {
 // ═══════════════════════════════════════════
 
 export async function getPayments() {
-  const { data, error } = await sb
+  const { data, error } = await scopeOrg(sb
     .from("payments")
     .select("*")
-    .order("date", { ascending: false });
+    .order("date", { ascending: false }));
   if (error) throw error;
   return data.map(dbToPayment);
 }
@@ -519,10 +531,10 @@ function dbToSession(s, logs) {
 }
 
 export async function getWorkoutSessions() {
-  const { data: sessions, error: sErr } = await sb
+  const { data: sessions, error: sErr } = await scopeOrg(sb
     .from("workout_sessions")
     .select("*")
-    .order("started_at", { ascending: false });
+    .order("started_at", { ascending: false }));
   if (sErr) throw sErr;
   if (!sessions.length) return [];
 
@@ -662,10 +674,10 @@ function dbToChallenge(c) {
 }
 
 export async function getChallenges() {
-  const { data, error } = await sb
+  const { data, error } = await scopeOrg(sb
     .from("challenges")
     .select("*")
-    .order("starts_on", { ascending: false });
+    .order("starts_on", { ascending: false }));
   if (error) throw error;
   return (data || []).map(dbToChallenge);
 }
@@ -716,10 +728,10 @@ export async function setOrgGamification(orgId, config) {
 }
 
 export async function getCatalogs() {
-  const { data, error } = await sb
+  const { data, error } = await scopeOrg(sb
     .from("catalogs")
     .select("*")
-    .order("sort_order");
+    .order("sort_order"));
   if (error) throw error;
   const out = {};
   (data || []).forEach((r) => {

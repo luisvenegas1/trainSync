@@ -45,7 +45,7 @@ export const FEATURE_CATALOG = [
   { key: "measurements", label: "Mediciones", desc: "Registro de mediciones corporales del cliente." },
   { key: "analytics", label: "Analítica / Historial", desc: "Gráficas y seguimiento de progreso." },
   { key: "payment_reminders", label: "Recordatorios de pago", desc: "Correos automáticos antes del vencimiento (requiere config del entrenador)." },
-  { key: "challenges", label: "Retos y medallas", desc: "Gamificación: medallas y retos entre clientes (en desarrollo)." },
+  { key: "challenges", label: "Retos y medallas (beta)", desc: "Gamificación: medallas y retos entre clientes. En pruebas: apagado para todos salvo que lo actives (‘Activada’) en un tenant." },
 ];
 
 // Normaliza un plan desconocido a 'base'.
@@ -59,17 +59,26 @@ export function planFeatures(plan) {
   return PLAN_FEATURES[normalizePlan(plan)] || PLAN_FEATURES.base;
 }
 
+// Módulos EN PRUEBAS (beta): están apagados para TODOS por defecto (incluso Premium)
+// y NO se pueden activar por plan — solo con un override explícito "Activada" por
+// organización. Así un módulo nuevo nunca aparece por error mientras se prueba; el
+// superadmin lo enciende a mano en el tenant que quiera. Cuando esté 100%, se saca
+// de acá y se mete al plan que corresponda.
+export const BETA_FEATURES = new Set(["challenges"]);
+
 // Features EFECTIVAS = features del plan + overrides POR ORGANIZACIÓN.
 // Los overrides (organization_settings.feature_overrides, jsonb) permiten activar
-// (o desactivar) una feature para un tenant específico sin cambiar su plan — útil
-// para un tenant de prueba, un acuerdo custom, o un lanzamiento gradual.
+// (o desactivar) una feature para un tenant específico sin cambiar su plan.
 // Solo se aplican valores booleanos; cualquier otra cosa se ignora (seguro).
 export function effectiveFeatures(plan, overrides) {
   const base = { ...planFeatures(plan) };
-  if (overrides && typeof overrides === "object") {
-    for (const [key, val] of Object.entries(overrides)) {
-      if (typeof val === "boolean") base[key] = val;
-    }
+  const ov = overrides && typeof overrides === "object" ? overrides : {};
+  for (const [key, val] of Object.entries(ov)) {
+    if (typeof val === "boolean") base[key] = val;
+  }
+  // Módulos beta: off salvo override explícito === true (nunca por plan).
+  for (const key of BETA_FEATURES) {
+    if (ov[key] !== true) base[key] = false;
   }
   return base;
 }

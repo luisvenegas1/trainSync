@@ -56,4 +56,15 @@ describe("effectiveFeatures — overrides por organización", () => {
     expect(f.measurements).toBe(false);
     expect(f.analytics).toBe(false);
   });
+
+  // Módulos en pruebas (beta): apagados para todos salvo override explícito === true.
+  it("un módulo beta (challenges) está OFF por defecto en TODOS los planes", () => {
+    expect(effectiveFeatures("base", {}).challenges).toBe(false);
+    expect(effectiveFeatures("premium", {}).challenges).toBe(false);
+    expect(effectiveFeatures("premium", null).challenges).toBe(false);
+  });
+  it("un módulo beta solo se enciende con override explícito === true", () => {
+    expect(effectiveFeatures("premium", { challenges: true }).challenges).toBe(true);
+    expect(effectiveFeatures("premium", { challenges: false }).challenges).toBe(false);
+  });
 });
