@@ -699,6 +699,16 @@ export async function deleteChallenge(id) {
   if (error) throw error;
 }
 
+// Tabla de posiciones de un reto vía RPC SECURITY DEFINER. Devuelve solo {clientId,
+// name, count} — sin pesos. Autorizada en el backend a staff de la org o a clientes de
+// esa org SOLO si el reto es visible a clientes. Permite que un cliente vea el ranking
+// completo sin abrir la tabla de sesiones (aislamiento entre tenants intacto).
+export async function getChallengeLeaderboard(challengeId) {
+  const { data, error } = await sb.rpc("challenge_leaderboard", { p_challenge_id: challengeId });
+  if (error) throw error;
+  return (data || []).map((r) => ({ clientId: r.client_id, name: r.name || "Cliente", count: Number(r.count) || 0 }));
+}
+
 // ── Gamificación (medallas) por organización ─────────────────────
 export async function getOrgGamification(orgId) {
   if (!orgId) return {};

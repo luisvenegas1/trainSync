@@ -34,15 +34,19 @@ export function computeLeaderboard(sessions, clients = [], startDate, endDate) {
   }
 
   const rows = clients.map((c) => ({ clientId: c.id, name: c.name || "Cliente", count: counts[c.id] || 0 }));
-  rows.sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
+  return rankLeaderboard(rows);
+}
 
-  // Ranking con empates: mismo conteo → mismo puesto.
+// Ordena [{clientId,name,count}] desc y asigna rank con empates (mismo conteo = mismo
+// puesto). Reutilizable tanto para el cálculo local como para filas que vienen del backend.
+export function rankLeaderboard(rows) {
+  const sorted = [...(rows || [])].sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
   let rank = 0, prev = null;
-  rows.forEach((r, i) => {
+  sorted.forEach((r, i) => {
     if (r.count !== prev) { rank = i + 1; prev = r.count; }
     r.rank = rank;
   });
-  return rows;
+  return sorted;
 }
 
 // Posición y datos de un cliente puntual dentro del ranking.

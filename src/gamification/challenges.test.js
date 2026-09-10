@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isChallengeActive, computeLeaderboard, rankOf, wonChallenges } from "./challenges";
+import { isChallengeActive, computeLeaderboard, rankLeaderboard, rankOf, wonChallenges } from "./challenges";
 
 const clients = [{ id: "a", name: "Ana" }, { id: "b", name: "Beto" }, { id: "c", name: "Caro" }];
 
@@ -47,6 +47,24 @@ describe("computeLeaderboard", () => {
   it("sin período → cuenta todo", () => {
     const all = computeLeaderboard(sessions, clients);
     expect(all.find((r) => r.clientId === "a").count).toBe(9); // 5 sept + 4 agosto
+  });
+});
+
+describe("rankLeaderboard", () => {
+  it("ordena desc por conteo y asigna rank con empates", () => {
+    const rows = rankLeaderboard([
+      { clientId: "a", name: "Ana", count: 3 },
+      { clientId: "b", name: "Beto", count: 5 },
+      { clientId: "c", name: "Caro", count: 3 },
+    ]);
+    expect(rows[0].clientId).toBe("b");
+    expect(rows[0].rank).toBe(1);
+    expect(rows.find((r) => r.clientId === "a").rank).toBe(2);
+    expect(rows.find((r) => r.clientId === "c").rank).toBe(2); // empate
+  });
+  it("tolera lista vacía o nula", () => {
+    expect(rankLeaderboard([])).toEqual([]);
+    expect(rankLeaderboard(null)).toEqual([]);
   });
 });
 

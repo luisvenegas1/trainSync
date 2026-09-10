@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTenant } from "../tenant/tenantContext";
 import { usePermissions } from "../auth/PermissionsContext";
-import { setOrgGamification } from "../db";
+import { setOrgGamification, getChallengeLeaderboard } from "../db";
 import { Toast } from "../trainsync.ui";
 import { computeMedals, weeklyGoalFor, DEFAULT_GOAL_PCT, MEDAL_META } from "./medals";
-import { computeLeaderboard, isChallengeActive, rankOf, wonChallenges, RANK_EMOJI } from "./challenges";
+import { computeLeaderboard, rankLeaderboard, isChallengeActive, rankOf, wonChallenges, RANK_EMOJI } from "./challenges";
 import { weightProgress } from "./weightProgress";
 
 // ── Celebración: medalla ganada al finalizar un entrenamiento ────
@@ -252,6 +252,22 @@ export function MedalsView({ sessions, clientId, gamification, goal = null, clie
   const curMeta = cur.medal ? MEDAL_META[cur.medal] : null;
   // Reto activo y visible a clientes (el más reciente si hubiera varios).
   const activeChallenge = challenges.find((c) => c.visibleToClients && isChallengeActive(c));
+  // El leaderboard del cliente NO puede calcularse localmente (RLS: solo ve sus sesiones).
+  // Lo trae la RPC (nombre + conteo de todos los clientes de la org). Fallback local si falla.
+  const [remoteRows, setRemoteRows] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    // async IIFE: evita el setState síncrono dentro del cuerpo del efecto.
+    (async () => {
+      await Promise.resolve();
+      if (!alive) return;
+      if (!activeChallenge) { setRemoteRows(null); return; }
+      try { const rows = await getChallengeLeaderboard(activeChallenge.id); if (alive) setRemoteRows(rows); }
+      catch { if (alive) setRemoteRows(null); }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChallenge?.id]);
   // Trofeos: retos ya finalizados que ganó (estante de logros).
   const trophies = wonChallenges(sessions, clients, challenges, clientId);
   // Progreso de peso: en cuántos ejercicios subió el peso en las últimas 2 semanas.
@@ -316,7 +332,10 @@ export function MedalsView({ sessions, clientId, gamification, goal = null, clie
       )}
 
       {activeChallenge && (() => {
-        const rows = computeLeaderboard(sessions, clients, activeChallenge.startsOn, activeChallenge.endsOn);
+        // Preferir el ranking del backend (ve a todos); si no hay, calcular local (solo yo).
+        const rows = remoteRows && remoteRows.length
+          ? rankLeaderboard(remoteRows)
+          : computeLeaderboard(sessions, clients, activeChallenge.startsOn, activeChallenge.endsOn);
         const me = rankOf(rows, clientId);
         return (
           <div className="card" style={{ marginBottom: 12, background: "#FFF8E1", border: "1px solid #FFE082" }}>
