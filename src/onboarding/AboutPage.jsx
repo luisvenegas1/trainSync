@@ -10,6 +10,7 @@ export function AboutPage() {
     { icon: "📊", t: "Progreso y mediciones", d: "Registrá mediciones (peso, grasa, masa muscular y más) y mirá la evolución de cada cliente en gráficas claras." },
     { icon: "🔔", t: "Recordatorios de pago", d: "Automatizá los avisos de vencimiento por email para que nadie se olvide de pagar la mensualidad." },
     { icon: "🎨", t: "Tu marca", d: "Tu logo, tus colores y tu nombre. Tus clientes ven tu marca, no la nuestra." },
+    { icon: "🏅", t: "Retos y medallas", d: "Motivá a tus clientes: medallas automáticas según su meta semanal, retos entre ellos y una animación al ganar. Vos ves los logros de cada uno." },
   ];
   return (
     <div>
@@ -47,7 +48,7 @@ export function AboutPage() {
           {[
             { p: "base", d: "Clientes, rutinas, ejercicios y asignación. Lo esencial para arrancar." },
             { p: "pro", d: "Todo Base + mediciones, historial y gráficas de progreso." },
-            { p: "premium", d: "Todo Pro + recordatorios automáticos de pago por email y automatizaciones." },
+            { p: "premium", d: "Todo Pro + recordatorios automáticos de pago por email, retos y medallas, y automatizaciones." },
           ].map((x) => (
             <div key={x.p} style={{ border: "1px solid #DDE4F0", borderRadius: 12, padding: 14 }}>
               <div style={{ fontWeight: 900, color: "#1A5DC8", marginBottom: 4 }}>{PLAN_LABELS[x.p]}</div>

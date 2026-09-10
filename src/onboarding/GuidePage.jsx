@@ -8,6 +8,7 @@ const FEATURE_LABELS = {
   analytics: "Gráficas de progreso",
   payment_reminders: "Recordatorios de pago automáticos",
   custom_branding: "Marca propia (logo/colores)",
+  challenges: "Retos y medallas",
 };
 
 const TRAINER_STEPS = [
@@ -19,14 +20,16 @@ const TRAINER_STEPS = [
   { t: "6. Revisar el progreso", d: "Entrá a un cliente → Historial/Progreso para ver la evolución de sus mediciones en gráficas. (Plan Pro o superior)." },
   { t: "7. Registrar mediciones", d: "En el cliente → Mediciones, registrá peso, grasa, masa muscular y más. Se guardan con fecha para armar el historial. (Plan Pro o superior)." },
   { t: "8. Configurar recordatorios", d: "En Ajustes de recordatorios elegí cuántos días antes del vencimiento avisar por email. (Plan Premium)." },
-  { t: "9. La mensualidad", d: "Cada cliente tiene un plan con fecha de vencimiento. Los recordatorios te ayudan a que nadie se olvide de pagar." },
-  { t: "10. Qué incluye cada plan", d: "Base: gestión y rutinas. Pro: + mediciones y progreso. Premium: + recordatorios automáticos. Ver el detalle abajo." },
+  { t: "9. Retos y medallas", d: "En Retos activás las medallas automáticas: cada cliente gana bronce/plata/oro según el % de su meta semanal (los días/semana de su rutina) que cumple. Podés crear retos entre clientes y ver los logros de cada uno. Tus clientes ven sus medallas, trofeos y progreso en su perfil, con una animación al ganar. (Plan Premium)." },
+  { t: "10. La mensualidad", d: "Cada cliente tiene un plan con fecha de vencimiento. Los recordatorios te ayudan a que nadie se olvide de pagar." },
+  { t: "11. Qué incluye cada plan", d: "Base: gestión y rutinas. Pro: + mediciones y progreso. Premium: + recordatorios automáticos y retos y medallas. Ver el detalle abajo." },
 ];
 
 const CLIENT_STEPS = [
   { t: "1. Tu rutina", d: "En Rutina ves tu plan del día. Tocá “Iniciar” el día que entrenás para registrarlo." },
   { t: "2. Tu progreso", d: "En Perfil → Historial y Mediciones ves cómo vas avanzando." },
-  { t: "3. Tus datos", d: "En Perfil podés editar tus datos y cambiar tu contraseña." },
+  { t: "3. Tus medallas", d: "Si tu entrenador las activó, en Perfil → Medallas ves la medalla de la semana según tu meta, tus trofeos, retos ganados y tu progreso de peso. Al completar tu meta, ¡te aparece una animación!" },
+  { t: "4. Tus datos", d: "En Perfil podés editar tus datos y cambiar tu contraseña." },
 ];
 
 export function GuidePage({ isTrainer = true, plan = "premium" }) {

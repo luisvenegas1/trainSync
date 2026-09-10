@@ -35,7 +35,7 @@ export const PLAN_FEATURES = {
     analytics: true,
     payment_reminders: true,
     custom_branding: true,
-    challenges: false,
+    challenges: true,        // retos y medallas: exclusivo de Premium
   },
 };
 
@@ -45,7 +45,7 @@ export const FEATURE_CATALOG = [
   { key: "measurements", label: "Mediciones", desc: "Registro de mediciones corporales del cliente." },
   { key: "analytics", label: "Analítica / Historial", desc: "Gráficas y seguimiento de progreso." },
   { key: "payment_reminders", label: "Recordatorios de pago", desc: "Correos automáticos antes del vencimiento (requiere config del entrenador)." },
-  { key: "challenges", label: "Retos y medallas (beta)", desc: "Gamificación: medallas y retos entre clientes. En pruebas: apagado para todos salvo que lo actives (‘Activada’) en un tenant." },
+  { key: "challenges", label: "Retos y medallas", desc: "Gamificación: medallas por objetivo, retos entre clientes y progreso de peso. Incluido en Premium; podés activarlo aquí para un tenant de otro plan." },
 ];
 
 // Normaliza un plan desconocido a 'base'.
@@ -64,7 +64,7 @@ export function planFeatures(plan) {
 // organización. Así un módulo nuevo nunca aparece por error mientras se prueba; el
 // superadmin lo enciende a mano en el tenant que quiera. Cuando esté 100%, se saca
 // de acá y se mete al plan que corresponda.
-export const BETA_FEATURES = new Set(["challenges"]);
+export const BETA_FEATURES = new Set([]);
 
 // Features EFECTIVAS = features del plan + overrides POR ORGANIZACIÓN.
 // Los overrides (organization_settings.feature_overrides, jsonb) permiten activar
@@ -104,6 +104,7 @@ export function upsellFor(feature) {
     measurements: `Las mediciones son parte del plan ${label}.`,
     analytics: `Las gráficas de progreso son parte del plan ${label}.`,
     payment_reminders: `Los recordatorios automáticos de pago son parte del plan ${label}.`,
+    challenges: `Los retos y medallas son parte del plan ${label}.`,
   };
   return msgs[feature] || `Esta función requiere el plan ${label}.`;
 }
