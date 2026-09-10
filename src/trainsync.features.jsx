@@ -11,7 +11,8 @@ import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker,
 import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer, deleteClientAccount } from "./auth/authClient";
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
-import { MedalsView } from "./gamification/GamificationUI";
+import { MedalsView, MedalCelebration } from "./gamification/GamificationUI";
+import { weeklyCountFor, medalUnlocked } from "./gamification/medals";
 import { initialWeightFor } from "./workout/lastWeights";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
@@ -1714,7 +1715,13 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
   const[showFinish,setShowFinish]=useState(false);
   const[cancelConfirm,setCancelConfirm]=useState(false);
   const[toast,setToast]=useState(null);
+  const[wonMedal,setWonMedal]=useState(null); // medalla recién ganada → celebración
   const[saving,wrap]=useSaving();
+  // Medallas: solo si el módulo está activo (retos beta) y el entrenador las prendió.
+  const{features}=usePermissions();
+  const tenant=useTenant();
+  const gamification=tenant?.gamification||{};
+  const medalsOn=!!(features?.challenges&&gamification.enabled);
 
   // Sort: active first, then by createdAt desc
   const userRoutines=routines
@@ -1753,7 +1760,14 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
     try{
       await setWorkoutSessions([session,...workoutSessions]);
       setActiveWorkout(null);setShowFinish(false);
-      setToast({msg:"¡Entrenamiento guardado! 💪",type:"ok"});
+      // ¿Este entreno cruzó un umbral de medalla semanal? → celebración animada.
+      let unlocked=null;
+      if(medalsOn){
+        const before=weeklyCountFor(workoutSessions,user.id);
+        unlocked=medalUnlocked(before,before+1,gamification.weekly);
+      }
+      if(unlocked)setWonMedal(unlocked);
+      else setToast({msg:"¡Entrenamiento guardado! 💪",type:"ok"});
     }catch(e){console.error(e);setToast({msg:"No se pudo guardar. Revisá tu conexión e intentá de nuevo.",type:"err"});}
   }
   function dayAction(day){
@@ -1793,6 +1807,7 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
     <RoutineDisplay routine={activeRoutine} exercises={exercises} renderDayAction={setWorkoutSessions?dayAction:undefined} workout={activeWorkout?{dayId:activeWorkout.dayId,weights:activeWorkout.weights||[],onWeight:setWorkoutWeight}:null}/>
 
     {showFinish&&activeWorkout&&<FinishWorkoutModal workout={activeWorkout} saving={saving} onCancel={()=>setShowFinish(false)} onConfirm={rows=>wrap(()=>finishWorkout(rows))}/>}
+    {wonMedal&&<MedalCelebration medal={wonMedal} onClose={()=>{setWonMedal(null);setToast({msg:"¡Entrenamiento guardado! 💪",type:"ok"});}}/>}
     {cancelConfirm&&<Modal title="Cancelar entrenamiento" onClose={()=>setCancelConfirm(false)}>
       <div style={{textAlign:"center",padding:"8px 0 16px"}}>
         <div style={{fontSize:40,marginBottom:12}}>🗑️</div>

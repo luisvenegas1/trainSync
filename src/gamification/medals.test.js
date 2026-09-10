@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { medalForCount, normalizeThresholds, nextThreshold, computeMedals, DEFAULT_THRESHOLDS } from "./medals";
+import { medalForCount, normalizeThresholds, nextThreshold, computeMedals, weeklyCountFor, medalUnlocked, DEFAULT_THRESHOLDS } from "./medals";
 
 const TH = { bronze: 3, silver: 5, gold: 7 };
 const NOW = new Date("2026-09-10T12:00:00Z"); // jueves
@@ -77,5 +77,35 @@ describe("computeMedals", () => {
     expect(r.totalMedals).toBe(0);
     expect(r.current.count).toBe(0);
     expect(r.current.medal).toBe(null);
+  });
+});
+
+describe("weeklyCountFor", () => {
+  it("cuenta solo entrenamientos completados de esa semana y cliente", () => {
+    const sessions = [
+      ...sess("c1", thisWeek, 2),
+      ...sess("c1", lastWeek, 4),           // otra semana
+      ...sess("c2", thisWeek, 3),           // otro cliente
+      ...sess("c1", thisWeek, 1, "active"), // no completada
+    ];
+    expect(weeklyCountFor(sessions, "c1", NOW)).toBe(2);
+  });
+  it("cero si no hay nada", () => {
+    expect(weeklyCountFor([], "c1", NOW)).toBe(0);
+  });
+});
+
+describe("medalUnlocked", () => {
+  it("devuelve la medalla al cruzar un umbral", () => {
+    expect(medalUnlocked(2, 3, TH)).toBe("bronze"); // 3er entreno → bronce
+    expect(medalUnlocked(4, 5, TH)).toBe("silver");  // 5to → plata
+    expect(medalUnlocked(6, 7, TH)).toBe("gold");    // 7mo → oro
+  });
+  it("null si no se cruza ningún umbral", () => {
+    expect(medalUnlocked(0, 1, TH)).toBe(null);
+    expect(medalUnlocked(3, 4, TH)).toBe(null); // sigue en bronce
+  });
+  it("null si ya tenía ese nivel o superior", () => {
+    expect(medalUnlocked(7, 8, TH)).toBe(null); // ya era oro
   });
 });

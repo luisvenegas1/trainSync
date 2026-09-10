@@ -4,4 +4,4 @@
 //   • MINOR (1.x.0): funcionalidades nuevas que no rompen lo anterior.
 //   • MAJOR (x.0.0): cambios grandes o incompatibles.
 // Mantener este número igual al "version" de package.json.
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.5.0";

@@ -54,6 +54,34 @@ function sessionsByWeek(sessions, clientId) {
   return byWeek;
 }
 
+// Entrenamientos COMPLETADOS por el cliente en la semana de `now` (para saber si al
+// terminar uno cruzó un umbral de medalla). Puro: no muta nada.
+export function weeklyCountFor(sessions, clientId, now = new Date()) {
+  const curKey = weekKey(now);
+  let n = 0;
+  for (const s of sessions || []) {
+    if (s.userId !== clientId) continue;
+    if (s.status && s.status !== "completed") continue;
+    const date = s.finishedAt || s.startedAt || s.createdAt;
+    if (!date || weekKey(date) !== curKey) continue;
+    n += 1;
+  }
+  return n;
+}
+
+// ¿Al pasar de `beforeCount` a `afterCount` entrenamientos en la semana se DESBLOQUEÓ
+// una medalla nueva (o se subió de nivel)? Devuelve "gold"|"silver"|"bronze" o null.
+// Ej: umbral plata=3; al terminar el 3er entreno (before 2 → after 3) devuelve "silver".
+export function medalUnlocked(beforeCount, afterCount, thresholds = DEFAULT_THRESHOLDS) {
+  const t = normalizeThresholds(thresholds);
+  const before = medalForCount(beforeCount, t);
+  const after = medalForCount(afterCount, t);
+  if (!after) return null;
+  const rank = { bronze: 1, silver: 2, gold: 3 };
+  if (before && rank[after] <= rank[before]) return null; // no subió de nivel
+  return after;
+}
+
 // Resumen de gamificación de un cliente: semana actual + record acumulado + semanas.
 export function computeMedals(sessions, clientId, thresholds = DEFAULT_THRESHOLDS, now = new Date()) {
   const t = normalizeThresholds(thresholds);

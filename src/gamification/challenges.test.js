@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isChallengeActive, computeLeaderboard, rankOf } from "./challenges";
+import { isChallengeActive, computeLeaderboard, rankOf, wonChallenges } from "./challenges";
 
 const clients = [{ id: "a", name: "Ana" }, { id: "b", name: "Beto" }, { id: "c", name: "Caro" }];
 
@@ -47,5 +47,31 @@ describe("computeLeaderboard", () => {
   it("sin período → cuenta todo", () => {
     const all = computeLeaderboard(sessions, clients);
     expect(all.find((r) => r.clientId === "a").count).toBe(9); // 5 sept + 4 agosto
+  });
+});
+
+describe("wonChallenges", () => {
+  const NOW = new Date("2026-10-15T12:00:00Z");
+  const sessions = [
+    ...sess("a", "2026-09-10", 5), // Ana gana septiembre
+    ...sess("b", "2026-09-12", 3),
+  ];
+  const finished = { id: "ch1", title: "Reto Septiembre", startsOn: "2026-09-01", endsOn: "2026-09-30", prize: "1 mes gratis" };
+  const active = { id: "ch2", title: "Reto Octubre", startsOn: "2026-10-01", endsOn: "2026-10-31" };
+
+  it("devuelve retos cerrados que el cliente ganó (1er lugar)", () => {
+    const won = wonChallenges(sessions, clients, [finished], "a", NOW);
+    expect(won.length).toBe(1);
+    expect(won[0].id).toBe("ch1");
+    expect(won[0].count).toBe(5);
+  });
+  it("no incluye retos donde no quedó primero", () => {
+    expect(wonChallenges(sessions, clients, [finished], "b", NOW)).toEqual([]);
+  });
+  it("ignora retos activos (aún no cierran)", () => {
+    expect(wonChallenges(sessions, clients, [active], "a", NOW)).toEqual([]);
+  });
+  it("no cuenta como ganado si el cliente no entrenó (0)", () => {
+    expect(wonChallenges(sessions, clients, [finished], "c", NOW)).toEqual([]);
   });
 });

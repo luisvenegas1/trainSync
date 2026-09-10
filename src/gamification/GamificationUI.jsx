@@ -1,10 +1,51 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTenant } from "../tenant/tenantContext";
 import { usePermissions } from "../auth/PermissionsContext";
 import { setOrgGamification } from "../db";
 import { Toast } from "../trainsync.ui";
 import { computeMedals, DEFAULT_THRESHOLDS, MEDAL_META } from "./medals";
-import { computeLeaderboard, isChallengeActive, rankOf, RANK_EMOJI } from "./challenges";
+import { computeLeaderboard, isChallengeActive, rankOf, wonChallenges, RANK_EMOJI } from "./challenges";
+import { weightProgress } from "./weightProgress";
+
+// ── Celebración: medalla ganada al finalizar un entrenamiento ────
+// Se muestra a pantalla completa con animación cuando el cliente cruza un umbral
+// semanal (ej. al terminar el 3er entreno de la semana → 🥉). Puramente visual.
+const CELEBRATE_MSG = {
+  gold: "¡Medalla de ORO! Semana perfecta 🔥",
+  silver: "¡Medalla de PLATA! Vas increíble 💪",
+  bronze: "¡Medalla de BRONCE! Ya la ganaste 🎉",
+};
+export function MedalCelebration({ medal, onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 6000); // se cierra sola por si acaso
+    return () => clearTimeout(t);
+  }, [onClose]);
+  if (!medal) return null;
+  const meta = MEDAL_META[medal];
+  const confetti = Array.from({ length: 28 });
+  const colors = ["#D4A017", "#8A94A6", "#B87333", "#1A5DC8", "#4ADE80", "#F87171"];
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(11,31,75,0.72)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", animation: "medalFade .3s ease" }}>
+      <style>{`
+        @keyframes medalFade{from{opacity:0}to{opacity:1}}
+        @keyframes medalPop{0%{transform:scale(0) rotate(-40deg);opacity:0}60%{transform:scale(1.25) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+        @keyframes medalShine{0%,100%{filter:drop-shadow(0 0 12px rgba(255,255,255,.35))}50%{filter:drop-shadow(0 0 34px rgba(255,255,255,.95))}}
+        @keyframes confFall{0%{transform:translateY(-120px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.9}}
+        @keyframes medalRise{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+      `}</style>
+      {confetti.map((_, i) => {
+        const left = (i * 3.57 + (i % 3) * 5) % 100;
+        return <span key={i} style={{ position: "absolute", top: 0, left: `${left}%`, width: 9, height: 14, background: colors[i % colors.length], borderRadius: 2, animation: `confFall ${1.8 + (i % 5) * 0.35}s linear ${(i % 7) * 0.15}s infinite` }} />;
+      })}
+      <div onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", color: "#fff", padding: 24, maxWidth: 340 }}>
+        <div style={{ fontSize: 120, lineHeight: 1, animation: "medalPop .7s cubic-bezier(.2,1.4,.4,1) both, medalShine 1.8s ease-in-out .7s infinite" }}>{meta.emoji}</div>
+        <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FFE082", marginTop: 14, animation: "medalRise .5s ease .5s both" }}>¡Lo lograste!</div>
+        <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6, animation: "medalRise .5s ease .65s both", fontFamily: "'Barlow Condensed',sans-serif" }}>{CELEBRATE_MSG[medal]}</div>
+        <button onClick={onClose} className="btn btn-sm" style={{ marginTop: 22, background: "#fff", color: "#0B1F4B", fontWeight: 800, animation: "medalRise .5s ease .8s both" }}>¡Seguir así! 🎯</button>
+      </div>
+    </div>
+  );
+}
 
 // Tabla de posiciones reutilizable (entrenador y cliente).
 function Leaderboard({ rows, highlightId }) {
@@ -153,6 +194,10 @@ export function MedalsView({ sessions, clientId, gamification, clients = [], cha
   const curMeta = cur.medal ? MEDAL_META[cur.medal] : null;
   // Reto activo y visible a clientes (el más reciente si hubiera varios).
   const activeChallenge = challenges.find((c) => c.visibleToClients && isChallengeActive(c));
+  // Trofeos: retos ya finalizados que ganó (estante de logros).
+  const trophies = wonChallenges(sessions, clients, challenges, clientId);
+  // Progreso de peso: en cuántos ejercicios subió el peso en las últimas 2 semanas.
+  const progress = weightProgress(sessions, clientId);
 
   return (
     <div>
@@ -176,6 +221,41 @@ export function MedalsView({ sessions, clientId, gamification, clients = [], cha
           ))}
         </div>
       </div>
+
+      {progress.count > 0 && (
+        <div className="card" style={{ marginBottom: 12, background: progress.earned ? "#ECFDF5" : "#F8FAFC", border: progress.earned ? "1px solid #A7F3D0" : "1px solid #E3E6EA" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 30 }}>📈</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, color: "#0B1F4B" }}>{progress.earned ? "¡Insignia de progreso!" : "Vas subiendo el peso"}</div>
+              <div style={{ fontSize: 12, color: "#475569" }}>Subiste el peso en <strong>{progress.count}</strong> ejercicio{progress.count === 1 ? "" : "s"} en las últimas 2 semanas{progress.earned ? " 💪" : `. Te falta${progress.threshold - progress.count === 1 ? "" : "n"} ${progress.threshold - progress.count} para la insignia.`}</div>
+            </div>
+          </div>
+          {progress.improved.length > 0 && (
+            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {progress.improved.slice(0, 6).map((e) => (
+                <span key={e.exId} style={{ fontSize: 11, background: "#fff", border: "1px solid #D1FAE5", borderRadius: 999, padding: "3px 9px", color: "#065F46", fontWeight: 600 }}>{e.name}: {e.from}→{e.to} lbs</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {trophies.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7A99", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>🏆 Trofeos · retos ganados</div>
+          {trophies.map((ch) => (
+            <div key={ch.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #EEF2F9" }}>
+              <span style={{ fontSize: 26 }}>🏆</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, color: "#0B1F4B", fontSize: 14 }}>{ch.title}</div>
+                <div style={{ fontSize: 11, color: "#6B7A99" }}>1er lugar · {ch.count} entreno{ch.count === 1 ? "" : "s"}{ch.prize ? ` · 🎁 ${ch.prize}` : ""}</div>
+              </div>
+              <span className="badge bd-green" style={{ fontSize: 9 }}>GANADO</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {activeChallenge && (() => {
         const rows = computeLeaderboard(sessions, clients, activeChallenge.startsOn, activeChallenge.endsOn);

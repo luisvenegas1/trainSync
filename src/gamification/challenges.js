@@ -50,4 +50,19 @@ export function rankOf(rows, clientId) {
   return rows.find((r) => r.clientId === clientId) || null;
 }
 
+// Retos ya FINALIZADOS que el cliente GANÓ (quedó de primero, con al menos 1 entreno).
+// Sirve para el "estante de trofeos" en el perfil. Puro: deriva de las sesiones.
+export function wonChallenges(sessions, clients, challenges = [], clientId, now = new Date()) {
+  const out = [];
+  for (const ch of challenges) {
+    if (isChallengeActive(ch, now)) continue; // solo los que ya cerraron
+    if (ch.endsOn && new Date(ch.endsOn + "T23:59:59").getTime() > now.getTime()) continue; // aún no empieza/termina
+    const rows = computeLeaderboard(sessions, clients, ch.startsOn, ch.endsOn);
+    const me = rankOf(rows, clientId);
+    if (me && me.rank === 1 && me.count > 0) out.push({ ...ch, count: me.count });
+  }
+  out.sort((a, b) => (a.endsOn < b.endsOn ? 1 : -1)); // más reciente primero
+  return out;
+}
+
 export const RANK_EMOJI = { 1: "🥇", 2: "🥈", 3: "🥉" };
