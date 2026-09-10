@@ -26,6 +26,7 @@ import { GuidePage } from "./onboarding/GuidePage";
 import { RemindersPage } from "./reminders/RemindersPage";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { DemoTopBar } from "./demo/DemoTopBar";
+import { ChallengesPage } from "./gamification/GamificationUI";
 
 // Modo de autenticación. Por defecto LEGACY: la app se comporta EXACTAMENTE como
 // hoy. VITE_AUTH_MODE=supabase activa el login por Supabase Auth (no se elimina el
@@ -162,6 +163,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
     else if (page === "routines") content = <RoutinesPage routines={data.routines} setRoutines={data.setRoutines} users={data.users} setUsers={data.setUsers} exercises={data.exercises} saveRoutineAssignments={data.saveRoutineAssignments} />;
     else if (page === "exercises") content = <ExercisesPage exercises={data.exercises} setExercises={data.setExercises} />;
     else if (page === "reminders") content = <RemindersPage />;
+    else if (page === "challenges") content = <ChallengesPage />;
     else if (page === "admins") content = <AdminsPage />;
   } else {
     if (page === "my-routine") content = <MyRoutinePage user={liveUser} routines={data.routines} exercises={data.exercises} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} />;
@@ -173,7 +175,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
       <PermissionsContext.Provider value={{ role: capabilityRole, readOnly, plan, features }}>
         <style>{STYLES}</style>
         <div className="app">
-          <Sidebar user={liveUser} page={page} setPage={setPage} onLogout={onLogout} isSuperadmin={isSuperadmin} />
+          <Sidebar user={liveUser} page={page} setPage={setPage} onLogout={onLogout} isSuperadmin={isSuperadmin} features={features} />
           <main className="main">
             {readOnly && (demoControls ? <DemoTopBar {...demoControls} currentUser={currentUser} /> : <DemoBanner />)}
             {isT && !readOnly && <OnboardingTour onGo={setPage} clientsCount={data.users.filter((u) => u.role !== "trainer").length} routinesCount={data.routines.length} />}

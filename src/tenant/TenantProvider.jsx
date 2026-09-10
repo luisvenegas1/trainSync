@@ -88,7 +88,7 @@ function MultiTenant({ children }) {
     );
   }
 
-  const value = { mode: "tenant", slug: state.slug, org: state.org, branding: state.branding, featureOverrides: state.settings?.feature_overrides || {} };
+  const value = { mode: "tenant", slug: state.slug, org: state.org, branding: state.branding, featureOverrides: state.settings?.feature_overrides || {}, gamification: state.settings?.gamification || {} };
   return (
     <TenantContext.Provider value={value}>
       <BrandingContext.Provider value={state.branding}><DocumentBranding branding={state.branding} />{children}</BrandingContext.Provider>

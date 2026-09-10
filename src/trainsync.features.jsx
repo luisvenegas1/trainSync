@@ -11,6 +11,7 @@ import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker,
 import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer } from "./auth/authClient";
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
+import { MedalsView } from "./gamification/GamificationUI";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
 import { PlanGate } from "./plans/PlanGate";
@@ -1790,6 +1791,9 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
 export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions}){
   const brand=useBranding();
   const{features}=usePermissions(); // plan de la organización (heredado por el cliente)
+  const tenant=useTenant();
+  const gamification=tenant?.gamification||{};
+  const showMedals=!!(features?.challenges&&gamification.enabled); // retos activos + entrenador los prendió
   const[tab,setTab]=useState("info");
   const[editing,setEditing]=useState(false);
   const[form,setForm]=useState({...user});
@@ -1861,7 +1865,7 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
     </div>
 
     <div className="tabs">
-      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],...(features?.measurements?[["measurements","📊 Mediciones"]]:[]),...(features?.analytics?[["history","📈 Historial"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
+      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],...(showMedals?[["medals","🏅 Medallas"]]:[]),...(features?.measurements?[["measurements","📊 Mediciones"]]:[]),...(features?.analytics?[["history","📈 Historial"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
     </div>
 
     {tab==="info"&&(<div>
@@ -1908,6 +1912,8 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
         catch(e){console.error(e);setToast({msg:ERR,type:"err"});}
       }}/>
     </div>)}
+
+    {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification}/>}
 
     {tab==="measurements"&&features?.measurements&&(<div>
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Última medición{latest?` — ${fmtDate(latest.date)}`:""}</div>

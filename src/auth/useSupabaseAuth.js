@@ -36,7 +36,11 @@ export function useSupabaseAuth(tenant) {
           setState({ status: "invalid_session" });
           return;
         }
-        const [memberships, client] = await Promise.all([loadMemberships(), loadClientProfile()]);
+        const [memberships, client, isSuperadmin] = await Promise.all([
+          loadMemberships(),
+          loadClientProfile(),
+          loadIsSuperadmin(),
+        ]);
         const profileName = user.user_metadata?.full_name || user.email || "";
         const res = resolveAccess({
           memberships,
@@ -44,16 +48,14 @@ export function useSupabaseAuth(tenant) {
           tenantOrg,
           authUid: user.id,
           profileName,
+          isSuperadmin, // superadmin puede entrar a cualquier tenant
         });
         if (res.status !== "ready") {
           setState({ status: res.status, appUser: null, capabilityRole: null });
           return;
         }
-        // Acceso concedido a la membresía: ahora evaluar la SUSCRIPCIÓN de la org.
-        const [subscription, isSuperadmin] = await Promise.all([
-          loadSubscription(tenantOrg.id),
-          loadIsSuperadmin(),
-        ]);
+        // Acceso concedido: ahora evaluar la SUSCRIPCIÓN de la org.
+        const subscription = await loadSubscription(tenantOrg.id);
         const orgAccess = orgAccessFor({ role: res.role, subscription, isSuperadmin });
         setState({
           status: "ready",

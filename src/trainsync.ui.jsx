@@ -176,7 +176,7 @@ export function LoginPage({onLogin,users}){
     <AppFooter/>
   </div>);
 }
-export function Sidebar({user,page,setPage,onLogout,isSuperadmin=false}){
+export function Sidebar({user,page,setPage,onLogout,isSuperadmin=false,features={}}){
   const brand=useBranding();
   const isT=user.role==="trainer";
   const navs=isT?[
@@ -185,6 +185,7 @@ export function Sidebar({user,page,setPage,onLogout,isSuperadmin=false}){
     {id:"routines",icon:"📋",label:"Rutinas"},
     {id:"exercises",icon:"🏋️",label:"Ejercicios"},
     {id:"reminders",icon:"🔔",label:"Recordatorios"},
+    ...(features.challenges?[{id:"challenges",icon:"🏅",label:"Retos"}]:[]),
     {id:"admins",icon:"🔑",label:"Admins"},
     {id:"guide",icon:"📖",label:"Guía"},
     {id:"about",icon:"✨",label:"Acerca de"},

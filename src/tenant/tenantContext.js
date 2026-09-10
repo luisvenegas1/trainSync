@@ -8,6 +8,7 @@ export const TenantContext = createContext({
   org: null,
   branding: JOHEL_BRANDING,
   featureOverrides: {},
+  gamification: {},
 });
 
 export function useTenant() {

@@ -14,9 +14,12 @@ export function resolveAccess({
   tenantOrg = null,
   authUid = null,
   profileName = null,
+  isSuperadmin = false,
 } = {}) {
   if (!tenantOrg) return { status: "org_not_found", role: null, appUser: null };
-  if (tenantOrg.status && tenantOrg.status !== "active") {
+  // El superadmin (platform_admins) puede entrar a cualquier tenant, incluso
+  // suspendido (para soporte). Si además es miembro/cliente, se usa esa vía (abajo).
+  if (tenantOrg.status && tenantOrg.status !== "active" && !isSuperadmin) {
     return { status: "suspended", role: null, appUser: null };
   }
 
@@ -40,6 +43,22 @@ export function resolveAccess({
   // Cliente vinculado a ESTE tenant.
   if (client && client.organizationId === tenantOrg.id) {
     return { status: "ready", role: "client", appUser: client };
+  }
+
+  // Superadmin sin membresía en esta org → acceso god-mode como staff (owner).
+  if (isSuperadmin) {
+    return {
+      status: "ready",
+      role: "owner",
+      appUser: {
+        id: authUid,
+        name: profileName || "Soporte",
+        username: profileName || "",
+        role: "trainer",
+        organizationId: tenantOrg.id,
+        plan: {},
+      },
+    };
   }
 
   // Autenticado pero pertenece a otra organización (ej. Johel entrando a Tito) o a

@@ -645,6 +645,34 @@ export async function removeOrgAdmin(orgId, userId) {
   if (error) throw error;
 }
 
+// ── Gamificación (medallas) por organización ─────────────────────
+export async function getOrgGamification(orgId) {
+  if (!orgId) return {};
+  const { data, error } = await sb
+    .from("organization_settings")
+    .select("gamification")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.gamification || {};
+}
+
+export async function setOrgGamification(orgId, config) {
+  const clean = {
+    enabled: !!config?.enabled,
+    weekly: {
+      bronze: Math.max(1, Math.round(Number(config?.weekly?.bronze) || 3)),
+      silver: Math.max(1, Math.round(Number(config?.weekly?.silver) || 5)),
+      gold: Math.max(1, Math.round(Number(config?.weekly?.gold) || 7)),
+    },
+  };
+  const { error } = await sb
+    .from("organization_settings")
+    .upsert({ organization_id: orgId, gamification: clean }, { onConflict: "organization_id" });
+  if (error) throw error;
+  return clean;
+}
+
 export async function getCatalogs() {
   const { data, error } = await sb
     .from("catalogs")

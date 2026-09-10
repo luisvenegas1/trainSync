@@ -4,6 +4,24 @@ import { resolveAccess } from "./resolveAccess";
 const johel = { id: "org-johel", slug: "joheltraining", status: "active" };
 const tito = { id: "org-tito", slug: "titotrainer", status: "active" };
 
+describe("resolveAccess — superadmin god-mode", () => {
+  it("superadmin sin membresía entra a CUALQUIER tenant como staff", () => {
+    const r = resolveAccess({ memberships: [], tenantOrg: tito, authUid: "sa", profileName: "Soporte", isSuperadmin: true });
+    expect(r.status).toBe("ready");
+    expect(r.role).toBe("owner");
+    expect(r.appUser.role).toBe("trainer");
+    expect(r.appUser.organizationId).toBe("org-tito");
+  });
+  it("superadmin puede entrar incluso a un tenant suspendido", () => {
+    const r = resolveAccess({ memberships: [], tenantOrg: { ...tito, status: "suspended" }, authUid: "sa", isSuperadmin: true });
+    expect(r.status).toBe("ready");
+  });
+  it("un NO superadmin sin membresía sigue bloqueado (aislamiento intacto)", () => {
+    const r = resolveAccess({ memberships: [{ organizationId: "org-johel", role: "owner" }], tenantOrg: tito, authUid: "u1", isSuperadmin: false });
+    expect(r.status).toBe("wrong_org");
+  });
+});
+
 describe("resolveAccess — cutover Auth y aislamiento", () => {
   it("owner de Johel entra a Johel", () => {
     const r = resolveAccess({

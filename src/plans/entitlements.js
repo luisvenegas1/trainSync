@@ -18,6 +18,7 @@ export const PLAN_FEATURES = {
     analytics: false,        // gráficas/estadísticas de progreso
     payment_reminders: false,// recordatorios automáticos por email
     custom_branding: true,   // logo/colores por org
+    challenges: false,       // gamificación: retos y medallas
     // futuras: advanced_reports, client_notifications, automations, ...
   },
   pro: {
@@ -26,6 +27,7 @@ export const PLAN_FEATURES = {
     analytics: true,
     payment_reminders: false,
     custom_branding: true,
+    challenges: false,
   },
   premium: {
     workouts: true,
@@ -33,6 +35,7 @@ export const PLAN_FEATURES = {
     analytics: true,
     payment_reminders: true,
     custom_branding: true,
+    challenges: false,
   },
 };
 
