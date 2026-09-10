@@ -27,6 +27,7 @@ import { RemindersPage } from "./reminders/RemindersPage";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { DemoTopBar } from "./demo/DemoTopBar";
 import { ChallengesPage } from "./gamification/GamificationUI";
+import { AdminViewBar } from "./platform/AdminViewBar";
 
 // Modo de autenticación. Por defecto LEGACY: la app se comporta EXACTAMENTE como
 // hoy. VITE_AUTH_MODE=supabase activa el login por Supabase Auth (no se elimina el
@@ -145,7 +146,7 @@ function useAppData() {
 }
 
 // ── Shell autenticado (idéntico para ambos modos) ───────────────
-function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSuperadmin = false, plan = "premium", demoControls = null }) {
+function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSuperadmin = false, plan = "premium", demoControls = null, adminControls = null }) {
   const [page, setPage] = useState(currentUser.role === "trainer" ? "dashboard" : "my-routine");
   const isT = currentUser.role === "trainer";
   const liveUser = isT ? currentUser : (data.users.find((u) => u.id === currentUser.id) || currentUser);
@@ -177,6 +178,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
         <div className="app">
           <Sidebar user={liveUser} page={page} setPage={setPage} onLogout={onLogout} isSuperadmin={isSuperadmin} features={features} />
           <main className="main">
+            {adminControls && <AdminViewBar {...adminControls} currentUser={currentUser} />}
             {readOnly && (demoControls ? <DemoTopBar {...demoControls} currentUser={currentUser} /> : <DemoBanner />)}
             {isT && !readOnly && <OnboardingTour onGo={setPage} clientsCount={data.users.filter((u) => u.role !== "trainer").length} routinesCount={data.routines.length} />}
             {content}
@@ -213,6 +215,28 @@ function LegacyApp() {
   if (data.dbError) return <DbErrorScreen msg={data.dbError} />;
   if (!currentUser) return (<><style>{STYLES}</style><LoginPage onLogin={login} users={users} /></>);
   return <MainApp currentUser={currentUser} onLogout={logout} data={data} />;
+}
+
+// ── Shell del SUPERADMIN en un tenant (god-mode) ────────────────
+// Igual que MainApp pero con la barra para alternar Coach ↔ Cliente y así revisar
+// ambas experiencias con la misma cuenta. Escritura habilitada (soporte).
+function SuperAdminApp({ auth, data, tenant }) {
+  const [viewClientId, setViewClientId] = useState(null); // null = vista Coach
+  const clients = data.users.filter((u) => u.role !== "trainer");
+  const clientUser = viewClientId ? (clients.find((c) => c.id === viewClientId) || null) : null;
+  const currentUser = clientUser || auth.appUser;
+  return (
+    <MainApp
+      key={viewClientId || "coach"}
+      currentUser={currentUser}
+      capabilityRole={auth.capabilityRole}
+      onLogout={auth.signOut}
+      data={data}
+      isSuperadmin={auth.isSuperadmin}
+      plan={auth.subscription?.plan || "base"}
+      adminControls={{ viewClientId, setViewClientId, clients, tenantName: tenant?.branding?.displayName || tenant?.slug }}
+    />
+  );
 }
 
 // ── Raíz DEMO (tenant demo, SIN login) ──────────────────────────
@@ -286,6 +310,8 @@ function SupabaseApp() {
   if (auth.orgAccess === "billing") return (<><style>{STYLES}</style><BillingScreen subscription={auth.subscription} onLogout={auth.signOut} /></>);
   if (data.loading) return <LoadingScreen />;
   if (data.dbError) return <DbErrorScreen msg={data.dbError} />;
+  // Superadmin: shell con barra para alternar Coach ↔ Cliente en este tenant.
+  if (auth.isSuperadmin) return <SuperAdminApp auth={auth} data={data} tenant={tenant} />;
   return <MainApp currentUser={auth.appUser} capabilityRole={auth.capabilityRole} onLogout={auth.signOut} data={data} isSuperadmin={auth.isSuperadmin} plan={auth.subscription?.plan || "base"} />;
 }
 
