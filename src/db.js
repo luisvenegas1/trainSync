@@ -645,6 +645,48 @@ export async function removeOrgAdmin(orgId, userId) {
   if (error) throw error;
 }
 
+// ── Retos (challenges) ───────────────────────────────────────────
+function dbToChallenge(c) {
+  return {
+    id: c.id,
+    organizationId: c.organization_id,
+    title: c.title,
+    metric: c.metric || "most_workouts",
+    prize: c.prize || "",
+    startsOn: c.starts_on,
+    endsOn: c.ends_on,
+    visibleToClients: c.visible_to_clients !== false,
+    active: c.active !== false,
+    createdAt: c.created_at,
+  };
+}
+
+export async function getChallenges() {
+  const { data, error } = await sb
+    .from("challenges")
+    .select("*")
+    .order("starts_on", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(dbToChallenge);
+}
+
+export async function saveChallenge(ch, orgId) {
+  const id = ch.id || (crypto?.randomUUID ? crypto.randomUUID() : "ch_" + Math.random().toString(36).slice(2));
+  const row = {
+    id, organization_id: orgId, title: ch.title, metric: ch.metric || "most_workouts",
+    prize: ch.prize || null, starts_on: ch.startsOn, ends_on: ch.endsOn,
+    visible_to_clients: ch.visibleToClients !== false, active: ch.active !== false,
+  };
+  const { error } = await sb.from("challenges").upsert(row, { onConflict: "id" });
+  if (error) throw error;
+  return id;
+}
+
+export async function deleteChallenge(id) {
+  const { error } = await sb.from("challenges").delete().eq("id", id);
+  if (error) throw error;
+}
+
 // ── Gamificación (medallas) por organización ─────────────────────
 export async function getOrgGamification(orgId) {
   if (!orgId) return {};

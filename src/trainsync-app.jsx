@@ -7,6 +7,7 @@ import {
   getPayments, upsertPayment, deletePayment,
   getWorkoutSessions, upsertWorkoutSession, deleteWorkoutSession,
   getCatalogs, setCatalogCategory,
+  getChallenges, saveChallenge as dbSaveChallenge, deleteChallenge as dbDeleteChallenge,
 } from "./db";
 import { CatalogContext, buildCatalogValue } from "./trainsync.catalogs";
 import { STYLES } from "./trainsync.styles";
@@ -54,6 +55,7 @@ function useAppData() {
   const [payments, setPaymentsState] = useState([]);
   const [workoutSessions, setWorkoutSessionsState] = useState([]);
   const [catalogOverrides, setCatalogOverrides] = useState({});
+  const [challenges, setChallengesState] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState(null);
 
@@ -72,6 +74,8 @@ function useAppData() {
       catch (e) { console.warn("Entrenamientos no disponibles (¿falta correr supabase-entrenamientos.sql?):", e); }
       try { const cats = await getCatalogs(); setCatalogOverrides(cats); }
       catch (e) { console.warn("Catálogos no disponibles (¿falta correr supabase-catalogos.sql?):", e); }
+      try { const chs = await getChallenges(); setChallengesState(chs); }
+      catch (e) { console.warn("Retos no disponibles (¿falta la migración 0037?):", e); }
     } catch (e) {
       console.error("Error cargando datos:", e);
       setDbError("No se pudo conectar a la base de datos. Revisá tu conexión.");
@@ -129,6 +133,20 @@ function useAppData() {
   }
   const catalogValue = buildCatalogValue(catalogOverrides, saveCategory);
 
+  // Retos: persisten y refrescan el estado local.
+  async function saveChallenge(ch, orgId) {
+    const id = await dbSaveChallenge(ch, orgId);
+    const saved = { ...ch, id, organizationId: orgId };
+    setChallengesState((prev) => { const rest = prev.filter((c) => c.id !== id); return [saved, ...rest]; });
+    return id;
+  }
+  async function deleteChallenge(id) {
+    const prev = challenges;
+    setChallengesState((cs) => cs.filter((c) => c.id !== id));
+    try { await dbDeleteChallenge(id); }
+    catch (e) { setChallengesState(prev); console.error("Error borrando reto:", e); throw e; }
+  }
+
   // Asigna una rutina a un conjunto de usuarios (persiste + refleja en estado).
   async function saveRoutineAssignments(routineId, userIds) {
     const prev = routines;
@@ -138,10 +156,10 @@ function useAppData() {
   }
 
   return {
-    exercises, users, routines, measurements, payments, workoutSessions,
+    exercises, users, routines, measurements, payments, workoutSessions, challenges,
     loading, dbError, load, catalogValue,
     setUsers, setExercises, setRoutines, setMeasurements, setPayments, setWorkoutSessions,
-    saveRoutineAssignments,
+    saveRoutineAssignments, saveChallenge, deleteChallenge,
   };
 }
 
@@ -164,11 +182,11 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
     else if (page === "routines") content = <RoutinesPage routines={data.routines} setRoutines={data.setRoutines} users={data.users} setUsers={data.setUsers} exercises={data.exercises} saveRoutineAssignments={data.saveRoutineAssignments} />;
     else if (page === "exercises") content = <ExercisesPage exercises={data.exercises} setExercises={data.setExercises} />;
     else if (page === "reminders") content = <RemindersPage />;
-    else if (page === "challenges") content = <ChallengesPage />;
+    else if (page === "challenges") content = <ChallengesPage clients={data.users.filter((u) => u.role !== "trainer")} sessions={data.workoutSessions} challenges={data.challenges} onSaveChallenge={data.saveChallenge} onDeleteChallenge={data.deleteChallenge} />;
     else if (page === "admins") content = <AdminsPage />;
   } else {
     if (page === "my-routine") content = <MyRoutinePage user={liveUser} routines={data.routines} exercises={data.exercises} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} />;
-    else if (page === "my-profile") content = <MyProfilePage user={liveUser} setUsers={data.setUsers} users={data.users} measurements={data.measurements} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} />;
+    else if (page === "my-profile") content = <MyProfilePage user={liveUser} setUsers={data.setUsers} users={data.users} measurements={data.measurements} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} challenges={data.challenges} />;
   }
 
   return (

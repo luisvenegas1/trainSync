@@ -1788,7 +1788,7 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
 }
 
 // ── USER PROFILE ──
-export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions}){
+export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions,challenges=[]}){
   const brand=useBranding();
   const{features}=usePermissions(); // plan de la organización (heredado por el cliente)
   const tenant=useTenant();
@@ -1913,7 +1913,7 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
       }}/>
     </div>)}
 
-    {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification}/>}
+    {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification} clients={users.filter(u=>u.role!=="trainer")} challenges={challenges}/>}
 
     {tab==="measurements"&&features?.measurements&&(<div>
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Última medición{latest?` — ${fmtDate(latest.date)}`:""}</div>
