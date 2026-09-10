@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { LOGO_IMG, TRAINER_PHOTO } from "./trainsync.assets";
 import { getEmbed, initials, verifyPassword } from "./trainsync.utils";
 import { useBranding } from "./branding/BrandingContext";
+import { APP_VERSION } from "./version";
 
 export function Logo({size=52}){const b=useBranding();return(<img src={b.logoUrl||LOGO_IMG} alt={b.displayName} style={{width:size,height:size,objectFit:"contain",borderRadius:8}}/>);}
 
@@ -34,7 +35,7 @@ export function AppFooter(){
       © {year} {brand.footerName||brand.displayName} · {brand.tagline} · Todos los derechos reservados<br/>
       <a href="/terminos" style={{color:"inherit",textDecoration:"underline"}}>Términos</a> · <a href="/privacidad" style={{color:"inherit",textDecoration:"underline"}}>Privacidad</a><br/>
       · Desarrollado por <a href="https://wa.me/50688238325" target="_blank" rel="noreferrer" style={{color:"inherit",textDecoration:"underline",fontWeight:700}}>Luis Diego Venegas</a>
-      <span style={{opacity:0.5,marginLeft:8}}>· v1.0.0</span>
+      <span style={{opacity:0.5,marginLeft:8}}>· v{APP_VERSION}</span>
     </div>
   );
 }

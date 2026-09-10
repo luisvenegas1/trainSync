@@ -1789,6 +1789,7 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
 // ── USER PROFILE ──
 export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions}){
   const brand=useBranding();
+  const{features}=usePermissions(); // plan de la organización (heredado por el cliente)
   const[tab,setTab]=useState("info");
   const[editing,setEditing]=useState(false);
   const[form,setForm]=useState({...user});
@@ -1860,7 +1861,7 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
     </div>
 
     <div className="tabs">
-      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],["measurements","📊 Mediciones"],["history","📈 Historial"]].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
+      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],...(features?.measurements?[["measurements","📊 Mediciones"]]:[]),...(features?.analytics?[["history","📈 Historial"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
     </div>
 
     {tab==="info"&&(<div>
@@ -1908,16 +1909,16 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
       }}/>
     </div>)}
 
-    {tab==="measurements"&&(<PlanGate feature="measurements"><div>
+    {tab==="measurements"&&features?.measurements&&(<div>
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Última medición{latest?` — ${fmtDate(latest.date)}`:""}</div>
       {latest?(<div className="m-grid">{MEASUREMENT_FIELDS.map(f=>{const v=latest[f.key];return v?(<div key={f.key} className="m-card"><div className="m-lbl">{f.label}</div><div className="m-val">{v}<span className="m-unit"> {f.unit}</span></div></div>):null;})}</div>):<div className="empty"><div className="ico">📊</div><p>Sin mediciones registradas aún</p></div>}
-    </div></PlanGate>)}
+    </div>)}
 
-    {tab==="history"&&(<PlanGate feature="analytics"><div>
+    {tab==="history"&&features?.analytics&&(<div>
       {clientMsAsc.length>1&&<MultiChart clientMs={clientMsAsc}/>}
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Historial ({clientMsAsc.length})</div>
       {clientMsDesc.map(m=>(<div key={m.id} className="hist-row"><div className="hist-date">{fmtDate(m.date)}</div><div className="hist-vals">{MEASUREMENT_FIELDS.map(f=>m[f.key]&&<span key={f.key} className="hist-val">{f.label.split(" ")[0]}: {m[f.key]}{f.unit}</span>)}</div></div>))}
       {clientMsAsc.length===0&&<div className="empty"><div className="ico">📈</div><p>Sin historial</p></div>}
-    </div></PlanGate>)}
+    </div>)}
   </div>);
 }
