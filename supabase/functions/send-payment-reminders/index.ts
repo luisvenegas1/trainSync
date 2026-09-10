@@ -86,6 +86,18 @@ Deno.serve(async (req) => {
       if (due !== target) continue;
       summary.candidates++;
 
+      // Modo prueba: NO tocar la tabla de dedup (si insertáramos, el envío real del
+      // mismo día chocaría con el UNIQUE y no se mandaría). Solo miramos si ya se envió.
+      if (dryRun) {
+        const { data: existing } = await admin.from("payment_reminder_logs")
+          .select("id")
+          .eq("organization_id", st.organization_id).eq("client_id", c.id)
+          .eq("due_date", due).eq("reminder_type", "pre_due")
+          .maybeSingle();
+        if (existing) summary.skipped++; else summary.sent++;
+        continue;
+      }
+
       // 5) Anti-duplicados: insertar log; si ya existe (conflict), saltar.
       const ins = await admin.from("payment_reminder_logs").insert({
         organization_id: st.organization_id, client_id: c.id, due_date: due,
@@ -95,8 +107,6 @@ Deno.serve(async (req) => {
       if (ins.error) { summary.skipped++; continue; } // conflict → ya enviado
       const logId = ins.data?.id;
       if (!logId) { summary.skipped++; continue; }
-
-      if (dryRun) { summary.sent++; continue; }
 
       // 6) Enviar y registrar resultado.
       try {
