@@ -12,6 +12,7 @@ import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, ma
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
 import { MedalsView } from "./gamification/GamificationUI";
+import { initialWeightFor } from "./workout/lastWeights";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
 import { PlanGate } from "./plans/PlanGate";
@@ -1444,7 +1445,7 @@ export function GroupTimer({restSeconds}){
 }
 
 // ── ROUTINE DISPLAY (reusable) ──
-export function RoutineDisplay({routine,exercises,renderDayAction}){
+export function RoutineDisplay({routine,exercises,renderDayAction,workout=null}){
   const[openDays,setOpenDays]=useState({});
   const[videoEx,setVideoEx]=useState(null);
   const[imgZoom,setImgZoom]=useState(null);
@@ -1472,7 +1473,7 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
         </div>
       </div>
       {openDays[day.id]&&(<div className="day-b">
-        {day.groups.map((g)=>(<div key={g.id} className="grp-card">
+        {day.groups.map((g,gIdx)=>(<div key={g.id} className="grp-card">
           <div className="grp-h">
             <div className="grp-lbl">{g.label}</div>
             <span style={{fontSize:13,fontWeight:700}}>Grupo {g.label}</span>
@@ -1485,6 +1486,9 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
               const hasWeight=ex.weightAmount&&Number(ex.weightAmount)>0;
               const hasSurface=ex.surface&&ex.surface!=="Ninguno";
               const hasEquip=ex.equipment&&ex.equipment!=="Ninguno";
+              const isWo=workout&&workout.dayId===day.id; // día en curso: peso editable
+              const wi=day.groups.slice(0,gIdx).reduce((s,gg)=>s+gg.exercises.length,0)+ei;
+              const wv=isWo?(workout.weights[wi]||{}):null;
               return(<div key={ei} className="ex-row">
                 <div className="ex-num">{ei+1}</div>
                 <div style={{flex:1,minWidth:0}}>
@@ -1498,6 +1502,11 @@ export function RoutineDisplay({routine,exercises,renderDayAction}){
                     {hasSurface&&<span className="ex-tag" style={{background:"#FFF3E0",borderColor:"#FFE0B2",color:"#F57C00"}}><span className="tag-lbl" style={{color:"#FB8C00"}}>Superficie</span>{ex.surface}</span>}
                   </div>
                   {ex.notes&&<div className="ex-dt">📌 {ex.notes}</div>}
+                  {isWo&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}} onClick={e=>e.stopPropagation()}>
+                    <span style={{fontSize:11,fontWeight:800,color:"#2E7D32"}}>Peso de hoy:</span>
+                    <input className="inp" type="number" step="0.5" min={0} onKeyDown={preventNegKey} style={{width:72,minHeight:32,fontSize:13}} value={wv.val||""} onChange={e=>workout.onWeight(wi,{val:stripNeg(e.target.value)})} placeholder="—"/>
+                    <select className="sel" style={{width:62,minHeight:32,padding:"4px"}} value={wv.unit||"lbs"} onChange={e=>workout.onWeight(wi,{unit:e.target.value})}><option value="lbs">lbs</option><option value="kg">kg</option></select>
+                  </div>}
                 </div>
                 {info?.videoUrl&&<button className="vbtn" onClick={()=>setVideoEx(info)}>▶</button>}
               </div>);
@@ -1536,11 +1545,16 @@ export function ElapsedTimer({startedAt}){
 // ── WORKOUT: modal de finalizar (confirmar/editar pesos) ──
 export function FinishWorkoutModal({workout,onConfirm,onCancel,saving}){
   // Unidad por ejercicio (lbs/kg). Se ingresa en la unidad elegida pero SIEMPRE se guarda en libras.
-  const[rows,setRows]=useState(()=>workout.exercises.map(e=>({
-    ...e,
-    unit:e.weightUnit||"lbs",
-    val:e.plannedWeight?String(e.plannedWeight):"",
-  })));
+  // Precargar con los pesos que la persona fue anotando EN VIVO durante el entreno
+  // (o el del coach si no tocó ese ejercicio).
+  const[rows,setRows]=useState(()=>workout.exercises.map((e,i)=>{
+    const w=(workout.weights&&workout.weights[i])||{};
+    return {
+      ...e,
+      unit:w.unit||e.weightUnit||"lbs",
+      val:(w.val!=null&&w.val!=="")?String(w.val):(e.plannedWeight?String(e.plannedWeight):""),
+    };
+  }));
   function setVal(i,v){setRows(rs=>rs.map((r,idx)=>idx===i?{...r,val:v}:r));}
   function setUnit(i,next){setRows(rs=>rs.map((r,idx)=>idx===i?{...r,unit:next,val:r.val===""?"":String(convertWeight(r.val,r.unit,next))}:r));}
   function save(){
@@ -1716,12 +1730,22 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
   const prevRoutines=userRoutines.slice(1);
 
   function startWorkout(day){
-    const exs=[];
+    const exs=[];const weights=[];
     day.groups.forEach(g=>g.exercises.forEach(ex=>{
       const info=exercises.find(e=>e.id===ex.exId);
-      exs.push({exId:ex.exId,name:info?.name||"Ejercicio",series:String(ex.series||""),reps:String(ex.reps||""),plannedWeight:ex.weightAmount?String(ex.weightAmount):"",weightUnit:ex.weightUnit||"lbs",equipment:ex.equipment||"Ninguno"});
+      const e={exId:ex.exId,name:info?.name||"Ejercicio",series:String(ex.series||""),reps:String(ex.reps||""),plannedWeight:ex.weightAmount?String(ex.weightAmount):"",weightUnit:ex.weightUnit||"lbs",equipment:ex.equipment||"Ninguno"};
+      exs.push(e);
+      // Precargar el ÚLTIMO peso usado (o el del coach si es la primera vez).
+      const init=initialWeightFor(workoutSessions,user.id,e);
+      weights.push({val:init.val,unit:init.unit});
     }));
-    setActiveWorkout({sessionId:genId(),routineId:activeRoutine.id,dayId:day.id,dayLabel:day.label,startedAt:new Date().toISOString(),exercises:exs});
+    setActiveWorkout({sessionId:genId(),routineId:activeRoutine.id,dayId:day.id,dayLabel:day.label,startedAt:new Date().toISOString(),exercises:exs,weights});
+  }
+  // Editar en vivo el peso de un ejercicio durante el entrenamiento (persiste en localStorage).
+  function setWorkoutWeight(idx,patch){
+    if(!activeWorkout)return;
+    const weights=(activeWorkout.weights||[]).map((x,i)=>i===idx?{...x,...patch}:x);
+    setActiveWorkout({...activeWorkout,weights});
   }
   async function finishWorkout(rows){
     const now=new Date().toISOString();
@@ -1764,7 +1788,9 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
 
     {!activeWorkout&&<div style={{fontSize:12,color:"#6B7A99",marginBottom:10}}>Tocá <strong style={{color:"#2E7D32"}}>▶ Iniciar</strong> en el día que vas a entrenar para registrarlo.</div>}
 
-    <RoutineDisplay routine={activeRoutine} exercises={exercises} renderDayAction={setWorkoutSessions?dayAction:undefined}/>
+    {activeWorkout&&<div style={{fontSize:12,color:"#2E7D32",fontWeight:700,marginBottom:8,background:"#E8F5E9",border:"1px solid #C8E6C9",borderRadius:8,padding:"8px 12px"}}>💪 Anotá el peso que uses en cada ejercicio. Al finalizar te pedimos confirmar. La próxima vez ya te aparece el último peso que usaste.</div>}
+
+    <RoutineDisplay routine={activeRoutine} exercises={exercises} renderDayAction={setWorkoutSessions?dayAction:undefined} workout={activeWorkout?{dayId:activeWorkout.dayId,weights:activeWorkout.weights||[],onWeight:setWorkoutWeight}:null}/>
 
     {showFinish&&activeWorkout&&<FinishWorkoutModal workout={activeWorkout} saving={saving} onCancel={()=>setShowFinish(false)} onConfirm={rows=>wrap(()=>finishWorkout(rows))}/>}
     {cancelConfirm&&<Modal title="Cancelar entrenamiento" onClose={()=>setCancelConfirm(false)}>
