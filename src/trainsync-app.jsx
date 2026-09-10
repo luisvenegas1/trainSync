@@ -20,7 +20,7 @@ import { useSupabaseAuth } from "./auth/useSupabaseAuth";
 import { AuthLoading, SupabaseLogin, AuthErrorScreen, DemoBanner, SuspendedScreen, BillingScreen, SetNewPasswordScreen } from "./auth/AuthScreens";
 import { sb } from "./supabase";
 import { PermissionsContext } from "./auth/PermissionsContext";
-import { planFeatures } from "./plans/entitlements";
+import { effectiveFeatures } from "./plans/entitlements";
 import { AboutPage } from "./onboarding/AboutPage";
 import { GuidePage } from "./onboarding/GuidePage";
 import { RemindersPage } from "./reminders/RemindersPage";
@@ -149,7 +149,9 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
   const isT = currentUser.role === "trainer";
   const liveUser = isT ? currentUser : (data.users.find((u) => u.id === currentUser.id) || currentUser);
   const readOnly = capabilityRole === "demo_viewer";
-  const features = planFeatures(plan);
+  // Features efectivas = plan + overrides por organización (tenant de prueba, etc.)
+  const tenant = useTenant();
+  const features = effectiveFeatures(plan, tenant?.featureOverrides);
 
   let content;
   if (page === "about") content = <AboutPage />;

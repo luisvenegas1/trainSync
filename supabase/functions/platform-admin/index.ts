@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
       case "reactivate":          return await setSubscription(admin, callerId, { ...body, status: "active", _audit: "subscription.reactivated" });
       case "register_payment":    return await registerPayment(admin, callerId, body);
       case "update_branding":     return await updateBranding(admin, callerId, body);
+      case "update_features":     return await updateFeatures(admin, callerId, body);
       default: return json({ error: "unknown_action", action }, 400);
     }
   } catch (e) {
@@ -300,6 +301,26 @@ async function updateBranding(admin: SB, actor: string, body: SB) {
   const up = await admin.from("organization_settings").upsert(patch, { onConflict: "organization_id" });
   if (up.error) return json({ error: "branding_failed", detail: up.error.message }, 400);
   await audit(admin, actor, "org.branding_updated", orgId, { fields: Object.keys(patch).filter((k) => k !== "organization_id") });
+  return json({ ok: true, organization_id: orgId });
+}
+
+// ── update_features (overrides de features por organización) ────
+async function updateFeatures(admin: SB, actor: string, body: SB) {
+  const orgId = body.organization_id;
+  if (!orgId) return json({ error: "missing_org" }, 400);
+  const raw = body.feature_overrides;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return json({ error: "invalid_features" }, 400);
+  }
+  // Solo se guardan valores booleanos (seguridad/limpieza).
+  const clean: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "boolean") clean[k] = v;
+  }
+  const up = await admin.from("organization_settings")
+    .upsert({ organization_id: orgId, feature_overrides: clean }, { onConflict: "organization_id" });
+  if (up.error) return json({ error: "features_failed", detail: up.error.message }, 400);
+  await audit(admin, actor, "org.features_updated", orgId, { overrides: clean });
   return json({ ok: true, organization_id: orgId });
 }
 

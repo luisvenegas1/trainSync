@@ -104,6 +104,7 @@ export async function loadPlatformData() {
         instagram: st.instagram || "",
         contactEmail: st.contact_email || "",
         bio: st.bio || "",
+        featureOverrides: st.feature_overrides || {},
       },
     };
   });

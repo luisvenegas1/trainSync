@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { loadPlatformData, invokePlatform, existingSlugsOf, paymentsForOrg, auditForOrg } from "./platformApi";
 import { uploadLogo, uploadTrainerPhoto } from "../storage/storage";
+import { FEATURE_CATALOG, planFeatures } from "../plans/entitlements";
 import {
   validateNewOrg, validatePayment, bucketOrganizations, expiringSubscriptions,
   statusLabel, canSuspendOrg, SUB_STATUSES, PAYMENT_METHODS, PLATFORM_PLANS,
@@ -368,7 +369,7 @@ function OrgDetail({ org, data, busy, onBack, runAction, allSlugs }) {
       </div>
 
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {[["info", "Organización"], ["subscription", "Suscripción"], ["payments", "Pagos"], ["branding", "Branding"], ["audit", "Historial"]].map(([id, label]) => (
+        {[["info", "Organización"], ["subscription", "Suscripción"], ["payments", "Pagos"], ["branding", "Branding"], ["features", "Funciones"], ["audit", "Historial"]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ border: `1px solid ${C.line}`, background: tab === id ? C.blue : "#fff", color: tab === id ? "#fff" : C.ink, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>{label}</button>
         ))}
       </div>
@@ -377,6 +378,7 @@ function OrgDetail({ org, data, busy, onBack, runAction, allSlugs }) {
       {tab === "subscription" && <OrgSubscriptionTab org={org} busy={busy} runAction={runAction} />}
       {tab === "payments" && <OrgPaymentsTab org={org} payments={payments} busy={busy} runAction={runAction} />}
       {tab === "branding" && <OrgBrandingTab org={org} busy={busy} runAction={runAction} />}
+      {tab === "features" && <OrgFeaturesTab org={org} busy={busy} runAction={runAction} />}
       {tab === "audit" && (
         <div style={{ ...card }}>
           {audit.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>Sin acciones registradas.</div> : audit.map((a) => (
@@ -540,6 +542,60 @@ const BRANDING_FIELDS = {
   primary: "primary_color", secondary: "secondary_color",
   whatsapp: "whatsapp", instagram: "instagram", contactEmail: "contact_email", bio: "bio",
 };
+
+// Activar/desactivar funciones por organización (overrides sobre el plan).
+// Cada función puede quedar: "según el plan" (sin override), "activada" u "desactivada".
+function OrgFeaturesTab({ org, busy, runAction }) {
+  const planDefaults = planFeatures(org.plan || "base");
+  const initial = org.settings?.featureOverrides || {};
+  // Estado: para cada feature, "" = según el plan, "on" = activada, "off" = desactivada.
+  const toState = (ov) => {
+    const s = {};
+    for (const feat of FEATURE_CATALOG) {
+      s[feat.key] = feat.key in ov ? (ov[feat.key] ? "on" : "off") : "";
+    }
+    return s;
+  };
+  const [sel, setSel] = useState(() => toState(initial));
+  const [note, setNote] = useState(null);
+
+  function save() {
+    // Construir el objeto de overrides: solo las que NO están "según el plan".
+    const overrides = {};
+    for (const feat of FEATURE_CATALOG) {
+      if (sel[feat.key] === "on") overrides[feat.key] = true;
+      else if (sel[feat.key] === "off") overrides[feat.key] = false;
+    }
+    setNote(null);
+    runAction("update_features", { organization_id: org.id, feature_overrides: overrides }, "Funciones actualizadas.");
+  }
+
+  return (
+    <div style={{ ...card, maxWidth: 640 }}>
+      <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 14 }}>Funciones de {org.name}</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+        Activá o desactivá funciones para esta organización. "Según el plan" usa lo que incluye el plan actual (<strong>{(org.plan || "base")}</strong>).
+        Un override te deja probar o habilitar algo puntual sin cambiar el plan.
+      </div>
+      {FEATURE_CATALOG.map((feat) => (
+        <div key={feat.key} style={{ display: "flex", alignItems: "center", gap: 12, borderTop: `1px solid ${C.line}`, padding: "10px 0" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{feat.label}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{feat.desc}</div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Por plan: {planDefaults[feat.key] ? "incluida ✓" : "no incluida"}</div>
+          </div>
+          <select className="inp" style={{ width: 150, minHeight: 34 }} value={sel[feat.key]} onChange={(e) => setSel((p) => ({ ...p, [feat.key]: e.target.value }))}>
+            <option value="">Según el plan</option>
+            <option value="on">Activada</option>
+            <option value="off">Desactivada</option>
+          </select>
+        </div>
+      ))}
+      <button className="btn btn-p" style={{ marginTop: 12 }} disabled={busy} onClick={save}>Guardar funciones</button>
+      {note && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{note}</div>}
+    </div>
+  );
+}
 
 function OrgBrandingTab({ org, busy, runAction }) {
   const b = org.settings || {};

@@ -7,6 +7,7 @@ export const TenantContext = createContext({
   slug: "joheltraining",
   org: null,
   branding: JOHEL_BRANDING,
+  featureOverrides: {},
 });
 
 export function useTenant() {

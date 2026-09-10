@@ -36,6 +36,15 @@ export const PLAN_FEATURES = {
   },
 };
 
+// Features que se pueden activar/desactivar por organización desde el Panel de
+// Plataforma (overrides). Solo las que tiene sentido togglear por tenant.
+export const FEATURE_CATALOG = [
+  { key: "measurements", label: "Mediciones", desc: "Registro de mediciones corporales del cliente." },
+  { key: "analytics", label: "Analítica / Historial", desc: "Gráficas y seguimiento de progreso." },
+  { key: "payment_reminders", label: "Recordatorios de pago", desc: "Correos automáticos antes del vencimiento (requiere config del entrenador)." },
+  { key: "challenges", label: "Retos y medallas", desc: "Gamificación: medallas y retos entre clientes (en desarrollo)." },
+];
+
 // Normaliza un plan desconocido a 'base'.
 export function normalizePlan(plan) {
   const p = String(plan || "").toLowerCase();
@@ -45,6 +54,21 @@ export function normalizePlan(plan) {
 // Objeto de features del plan (siempre devuelve algo válido).
 export function planFeatures(plan) {
   return PLAN_FEATURES[normalizePlan(plan)] || PLAN_FEATURES.base;
+}
+
+// Features EFECTIVAS = features del plan + overrides POR ORGANIZACIÓN.
+// Los overrides (organization_settings.feature_overrides, jsonb) permiten activar
+// (o desactivar) una feature para un tenant específico sin cambiar su plan — útil
+// para un tenant de prueba, un acuerdo custom, o un lanzamiento gradual.
+// Solo se aplican valores booleanos; cualquier otra cosa se ignora (seguro).
+export function effectiveFeatures(plan, overrides) {
+  const base = { ...planFeatures(plan) };
+  if (overrides && typeof overrides === "object") {
+    for (const [key, val] of Object.entries(overrides)) {
+      if (typeof val === "boolean") base[key] = val;
+    }
+  }
+  return base;
 }
 
 // ¿El plan incluye esta feature?

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hasFeature, planFeatures, normalizePlan, minPlanFor, PLANS } from "./entitlements";
+import { hasFeature, planFeatures, normalizePlan, minPlanFor, PLANS, effectiveFeatures } from "./entitlements";
 
 describe("entitlements — plan → features", () => {
   it("Base: workouts sí; mediciones/analytics/recordatorios no", () => {
@@ -35,5 +35,25 @@ describe("entitlements — plan → features", () => {
       // una vez que se activa, no se desactiva en planes superiores
       for (let i = 1; i < vals.length; i++) if (vals[i - 1]) expect(vals[i]).toBe(true);
     }
+  });
+});
+
+describe("effectiveFeatures — overrides por organización", () => {
+  it("sin overrides = features del plan (no cambia nada)", () => {
+    expect(effectiveFeatures("base", null)).toEqual(planFeatures("base"));
+    expect(effectiveFeatures("premium", {})).toEqual(planFeatures("premium"));
+  });
+  it("un override puede ACTIVAR una feature en un tenant Base", () => {
+    const f = effectiveFeatures("base", { measurements: true });
+    expect(f.measurements).toBe(true);
+    expect(f.workouts).toBe(true); // no rompe las demás
+  });
+  it("un override puede activar una feature NUEVA (aún sin plan) para probar", () => {
+    expect(effectiveFeatures("base", { challenges: true }).challenges).toBe(true);
+  });
+  it("ignora overrides que no sean booleanos (seguro)", () => {
+    const f = effectiveFeatures("base", { measurements: "sí", analytics: 1 });
+    expect(f.measurements).toBe(false);
+    expect(f.analytics).toBe(false);
   });
 });
