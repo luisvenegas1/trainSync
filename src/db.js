@@ -712,12 +712,13 @@ export async function getOrgGamification(orgId) {
 }
 
 export async function setOrgGamification(orgId, config) {
+  // Medallas por % del objetivo real (días/semana de la rutina del cliente).
   const clean = {
     enabled: !!config?.enabled,
-    weekly: {
-      bronze: Math.max(1, Math.round(Number(config?.weekly?.bronze) || 3)),
-      silver: Math.max(1, Math.round(Number(config?.weekly?.silver) || 5)),
-      gold: Math.max(1, Math.round(Number(config?.weekly?.gold) || 7)),
+    goalPct: {
+      bronze: Math.min(200, Math.max(1, Math.round(Number(config?.goalPct?.bronze) || 50))),
+      silver: Math.min(200, Math.max(1, Math.round(Number(config?.goalPct?.silver) || 75))),
+      gold: Math.min(200, Math.max(1, Math.round(Number(config?.goalPct?.gold) || 100))),
     },
   };
   const { error } = await sb

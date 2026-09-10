@@ -3,7 +3,7 @@ import { useTenant } from "../tenant/tenantContext";
 import { usePermissions } from "../auth/PermissionsContext";
 import { setOrgGamification } from "../db";
 import { Toast } from "../trainsync.ui";
-import { computeMedals, DEFAULT_THRESHOLDS, MEDAL_META } from "./medals";
+import { computeMedals, weeklyGoalFor, DEFAULT_GOAL_PCT, MEDAL_META } from "./medals";
 import { computeLeaderboard, isChallengeActive, rankOf, wonChallenges, RANK_EMOJI } from "./challenges";
 import { weightProgress } from "./weightProgress";
 
@@ -70,21 +70,61 @@ function fmtRange(a, b) {
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const plusDaysISO = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
+// ── Logros de los clientes (dashboard del coach) ─────────────────
+// Para cada cliente: su meta (días/semana), cómo va esta semana, medalla actual,
+// cuántas veces llegó a la meta y su record acumulado. Todo derivado de las sesiones.
+function ClientAchievements({ clients, sessions, routines, pct }) {
+  const rows = clients.map((c) => {
+    const goal = weeklyGoalFor(c, routines);
+    const r = computeMedals(sessions, c.id, goal, pct);
+    return { id: c.id, name: c.name || "Cliente", goal, r };
+  }).sort((a, b) => (b.r.goalsReached - a.r.goalsReached) || (b.r.current.count - a.r.current.count));
+
+  if (!rows.length) return null;
+  return (
+    <div className="card" style={{ maxWidth: 560, marginBottom: 12 }}>
+      <div style={{ fontWeight: 800, color: "#0B1F4B", marginBottom: 4 }}>📊 Logros de tus clientes</div>
+      <div style={{ fontSize: 12, color: "#6B7A99", marginBottom: 10 }}>Cómo va cada uno esta semana y su historial de metas cumplidas.</div>
+      {rows.map((row) => {
+        const cur = row.r.current;
+        const meta = cur.medal ? MEDAL_META[cur.medal] : null;
+        return (
+          <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #EEF2F9" }}>
+            <span style={{ fontSize: 22, width: 26, textAlign: "center" }}>{meta ? meta.emoji : "⚪"}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: "#0B1F4B", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</div>
+              <div style={{ fontSize: 11, color: "#6B7A99" }}>
+                {row.goal ? <>Esta semana <strong style={{ color: cur.count >= row.goal ? "#2E7D32" : "#0B1F4B" }}>{cur.count}/{row.goal}</strong> días · llegó a la meta <strong>{row.r.goalsReached}</strong> {row.r.goalsReached === 1 ? "vez" : "veces"}</> : <span style={{ color: "#C0392B" }}>Sin rutina asignada</span>}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, fontSize: 12, color: "#475569" }}>
+              <span title="Oro">🥇{row.r.totals.gold}</span>
+              <span title="Plata">🥈{row.r.totals.silver}</span>
+              <span title="Bronce">🥉{row.r.totals.bronze}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Config + retos del ENTRENADOR ────────────────────────────────
-export function ChallengesPage({ clients = [], sessions = [], challenges = [], onSaveChallenge, onDeleteChallenge }) {
+export function ChallengesPage({ clients = [], sessions = [], challenges = [], routines = [], onSaveChallenge, onDeleteChallenge }) {
   const tenant = useTenant();
   const orgId = tenant?.org?.id || null;
   const { readOnly } = usePermissions();
   const g = tenant?.gamification || {};
   const [enabled, setEnabled] = useState(!!g.enabled);
-  const [weekly, setWeekly] = useState({
-    bronze: g.weekly?.bronze || DEFAULT_THRESHOLDS.bronze,
-    silver: g.weekly?.silver || DEFAULT_THRESHOLDS.silver,
-    gold: g.weekly?.gold || DEFAULT_THRESHOLDS.gold,
+  // Medallas por % del objetivo (días/semana de la rutina de cada cliente).
+  const [pct, setPct] = useState({
+    bronze: g.goalPct?.bronze || DEFAULT_GOAL_PCT.bronze,
+    silver: g.goalPct?.silver || DEFAULT_GOAL_PCT.silver,
+    gold: g.goalPct?.gold || DEFAULT_GOAL_PCT.gold,
   });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-  const setN = (k) => (e) => setWeekly((w) => ({ ...w, [k]: e.target.value }));
+  const setN = (k) => (e) => setPct((w) => ({ ...w, [k]: e.target.value }));
 
   // Formulario de reto nuevo
   const blank = { title: "", prize: "", startsOn: todayISO(), endsOn: plusDaysISO(30), visibleToClients: true };
@@ -95,7 +135,7 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], o
   async function saveConfig() {
     if (readOnly) { setToast({ msg: "Modo demostración: solo lectura", type: "err" }); return; }
     setSaving(true);
-    try { await setOrgGamification(orgId, { enabled, weekly }); setToast({ msg: "Configuración guardada. Tus clientes la verán al recargar.", type: "ok" }); }
+    try { await setOrgGamification(orgId, { enabled, goalPct: pct }); setToast({ msg: "Configuración guardada. Tus clientes la verán al recargar.", type: "ok" }); }
     catch (e) { setToast({ msg: "No se pudo guardar: " + (e?.message || e), type: "err" }); }
     finally { setSaving(false); }
   }
@@ -128,17 +168,25 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], o
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={readOnly} style={{ width: 18, height: 18 }} />
           <span style={{ fontWeight: 700, color: "#0B1F4B" }}>Activar medallas para mis clientes</span>
         </label>
-        <div style={{ fontSize: 12, color: "#6B7A99", marginBottom: 10 }}>Cuántos entrenamientos por semana hacen falta para cada medalla:</div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12, color: "#6B7A99", marginBottom: 10 }}>Cada cliente tiene una meta = los <strong>días/semana de su rutina</strong>. La medalla depende de qué % de su meta cumple en la semana:</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           {[["bronze", "🥉 Bronce"], ["silver", "🥈 Plata"], ["gold", "🥇 Oro"]].map(([k, lbl]) => (
-            <div className="fg" key={k} style={{ flex: "1 1 120px" }}>
-              <label>{lbl} — entrenos/semana</label>
-              <input className="inp" type="number" min={1} max={14} value={weekly[k]} onChange={setN(k)} disabled={readOnly || !enabled} />
+            <div key={k} style={{ flex: "1 1 120px", display: "flex", flexDirection: "column" }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#0B1F4B", marginBottom: 4 }}>{lbl}</label>
+              <div style={{ position: "relative" }}>
+                <input className="inp" type="number" min={1} max={200} value={pct[k]} onChange={setN(k)} disabled={readOnly || !enabled} style={{ paddingRight: 26 }} />
+                <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#6B7A99", fontWeight: 700, pointerEvents: "none" }}>%</span>
+              </div>
+              <div style={{ fontSize: 10, color: "#9AA7BD", marginTop: 3 }}>de la meta</div>
             </div>
           ))}
         </div>
-        <button className="btn btn-p" style={{ marginTop: 6 }} onClick={saveConfig} disabled={saving || readOnly}>{saving ? "Guardando…" : "Guardar medallas"}</button>
+        <div style={{ fontSize: 11, color: "#6B7A99", marginTop: 8, background: "#F8FAFC", borderRadius: 8, padding: "6px 10px" }}>Ejemplo: meta de 4 días → 🥉 {Math.ceil(4 * (Number(pct.bronze) || 50) / 100)}, 🥈 {Math.ceil(4 * (Number(pct.silver) || 75) / 100)}, 🥇 {Math.ceil(4 * (Number(pct.gold) || 100) / 100)} entrenos.</div>
+        <button className="btn btn-p" style={{ marginTop: 10 }} onClick={saveConfig} disabled={saving || readOnly}>{saving ? "Guardando…" : "Guardar medallas"}</button>
       </div>
+
+      {/* Logros de clientes (vista del coach) */}
+      {enabled && <ClientAchievements clients={clients} sessions={sessions} routines={routines} pct={pct} />}
 
       {/* Retos */}
       <div className="card" style={{ maxWidth: 560 }}>
@@ -187,9 +235,9 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], o
 }
 
 // ── Vista del CLIENTE: medallas + reto activo ────────────────────
-export function MedalsView({ sessions, clientId, gamification, clients = [], challenges = [] }) {
-  const th = gamification?.weekly || DEFAULT_THRESHOLDS;
-  const r = computeMedals(sessions, clientId, th);
+export function MedalsView({ sessions, clientId, gamification, goal = null, clients = [], challenges = [] }) {
+  const pct = gamification?.goalPct || DEFAULT_GOAL_PCT;
+  const r = computeMedals(sessions, clientId, goal, pct);
   const cur = r.current;
   const curMeta = cur.medal ? MEDAL_META[cur.medal] : null;
   // Reto activo y visible a clientes (el más reciente si hubiera varios).
@@ -205,7 +253,7 @@ export function MedalsView({ sessions, clientId, gamification, clients = [], cha
         <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7A99", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Esta semana</div>
         <div style={{ fontSize: 44, lineHeight: 1 }}>{curMeta ? curMeta.emoji : "⚪"}</div>
         <div style={{ fontWeight: 800, color: "#0B1F4B", marginTop: 6 }}>{curMeta ? curMeta.label : "Sin medalla aún"}</div>
-        <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>{cur.count} entrenamiento{cur.count === 1 ? "" : "s"} esta semana</div>
+        <div style={{ fontSize: 13, color: "#475569", marginTop: 4 }}>{r.goal ? <><strong>{cur.count} de {r.goal}</strong> días de tu meta esta semana</> : <>{cur.count} entrenamiento{cur.count === 1 ? "" : "s"} esta semana</>}</div>
         {cur.next && <div style={{ fontSize: 12, color: "#1A5DC8", fontWeight: 700, marginTop: 6 }}>Te falta{cur.next.need === 1 ? "" : "n"} {cur.next.need} para {MEDAL_META[cur.next.level].emoji} {MEDAL_META[cur.next.level].label}</div>}
       </div>
 

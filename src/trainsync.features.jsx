@@ -12,7 +12,7 @@ import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, ma
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
 import { MedalsView, MedalCelebration } from "./gamification/GamificationUI";
-import { weeklyCountFor, medalUnlocked } from "./gamification/medals";
+import { weeklyCountFor, medalUnlocked, weeklyGoalFor } from "./gamification/medals";
 import { initialWeightFor } from "./workout/lastWeights";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
@@ -1764,7 +1764,8 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
       let unlocked=null;
       if(medalsOn){
         const before=weeklyCountFor(workoutSessions,user.id);
-        unlocked=medalUnlocked(before,before+1,gamification.weekly);
+        const goal=Number(activeRoutine?.daysPerWeek)||null; // meta = días/semana de su rutina
+        unlocked=medalUnlocked(before,before+1,goal,gamification.goalPct);
       }
       if(unlocked)setWonMedal(unlocked);
       else setToast({msg:"¡Entrenamiento guardado! 💪",type:"ok"});
@@ -1844,7 +1845,7 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
 }
 
 // ── USER PROFILE ──
-export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions,challenges=[]}){
+export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=[],setWorkoutSessions,challenges=[],routines=[]}){
   const brand=useBranding();
   const{features}=usePermissions(); // plan de la organización (heredado por el cliente)
   const tenant=useTenant();
@@ -1969,7 +1970,7 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
       }}/>
     </div>)}
 
-    {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification} clients={users.filter(u=>u.role!=="trainer")} challenges={challenges}/>}
+    {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification} goal={weeklyGoalFor(user,routines)} clients={users.filter(u=>u.role!=="trainer")} challenges={challenges}/>}
 
     {tab==="measurements"&&features?.measurements&&(<div>
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Última medición{latest?` — ${fmtDate(latest.date)}`:""}</div>
