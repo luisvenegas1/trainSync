@@ -82,9 +82,10 @@ function ClientAchievements({ clients, sessions, routines, pct }) {
 
   if (!rows.length) return null;
   return (
-    <div className="card" style={{ maxWidth: 560, marginBottom: 12 }}>
+    <div className="card">
       <div style={{ fontWeight: 800, color: "#0B1F4B", marginBottom: 4 }}>📊 Logros de tus clientes</div>
       <div style={{ fontSize: 12, color: "#6B7A99", marginBottom: 10 }}>Cómo va cada uno esta semana y su historial de metas cumplidas.</div>
+      <div style={{ maxHeight: 560, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
       {rows.map((row) => {
         const cur = row.r.current;
         const meta = cur.medal ? MEDAL_META[cur.medal] : null;
@@ -105,6 +106,7 @@ function ClientAchievements({ clients, sessions, routines, pct }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -161,8 +163,14 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
       {toast && <Toast msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
       <div className="ph"><div><div className="pt">Retos y medallas</div><div className="ps">Premiá la constancia de tus clientes</div></div></div>
 
+      {/* Layout 2 columnas: izq = config + retos, der = logros. En pantallas chicas
+          colapsa a una sola columna (logros queda al final). */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12, alignItems: "start" }}>
+        {/* Columna izquierda */}
+        <div>
+
       {/* Medallas */}
-      <div className="card" style={{ maxWidth: 560, marginBottom: 12 }}>
+      <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontWeight: 800, color: "#0B1F4B", marginBottom: 8 }}>🏅 Medallas automáticas</div>
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 12 }}>
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={readOnly} style={{ width: 18, height: 18 }} />
@@ -185,11 +193,8 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
         <button className="btn btn-p" style={{ marginTop: 10 }} onClick={saveConfig} disabled={saving || readOnly}>{saving ? "Guardando…" : "Guardar medallas"}</button>
       </div>
 
-      {/* Logros de clientes (vista del coach) */}
-      {enabled && <ClientAchievements clients={clients} sessions={sessions} routines={routines} pct={pct} />}
-
       {/* Retos */}
-      <div className="card" style={{ maxWidth: 560 }}>
+      <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontWeight: 800, color: "#0B1F4B" }}>🏆 Retos (competencias)</div>
           {!readOnly && <button className="btn btn-s btn-sm" onClick={() => { setForm(blank); setShowForm((s) => !s); }}>{showForm ? "Cancelar" : "+ Nuevo reto"}</button>}
@@ -230,6 +235,11 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
           );
         })}
       </div>
+        </div>{/* /columna izquierda */}
+
+        {/* Columna derecha: logros de clientes */}
+        {enabled && <ClientAchievements clients={clients} sessions={sessions} routines={routines} pct={pct} />}
+      </div>{/* /grid */}
     </div>
   );
 }
