@@ -8,7 +8,7 @@ import { useCatalogs, CATALOG_META } from "./trainsync.catalogs";
 import { usePermissions } from "./auth/PermissionsContext";
 import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanStatusFromEndDate, initials, planColor, useLS, hashPassword, generatePassword, useSaving, weekKey, weekLabel, monthKey, monthLabel, dayKey, fmtDuration, convertWeight } from "./trainsync.utils";
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
-import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer } from "./auth/authClient";
+import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer, deleteClientAccount } from "./auth/authClient";
 import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
 import { MedalsView } from "./gamification/GamificationUI";
@@ -697,6 +697,16 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
       if(updated.reminderEnabled!==client.reminderEnabled){
         try{await setClientReminder(client.id,updated.reminderEnabled!==false);}catch(e){console.warn("setClientReminder:",e?.message||e);}
       }
+      // Si cambió el correo, reenviar la invitación al NUEVO correo (y la función
+      // invalida el link viejo borrando la cuenta Auth del correo equivocado).
+      const oldEmail=(client.email||"").trim().toLowerCase();
+      const newEmail=(updated.email||"").trim().toLowerCase();
+      let reinvited=false;
+      if(newEmail&&newEmail!==oldEmail&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)){
+        const inv=await inviteClient(client.id,newEmail);
+        if(inv.ok)reinvited=true;
+        else{setShowEditInfo(false);setToast({msg:"Datos guardados, pero no se pudo reenviar la invitación: "+(inv.error||"intentá de nuevo."),type:"err"});return;}
+      }
       if(newPwd){
         const res=await resetClientPassword(client.id,newPwd);
         if(!res.ok){
@@ -707,7 +717,7 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
           setToast({msg,type:"err"});return;
         }
       }
-      setShowEditInfo(false);setToast({msg:newPwd?"Datos y contraseña actualizados":"Datos actualizados",type:"ok"});
+      setShowEditInfo(false);setToast({msg:reinvited?"Datos guardados y correo de invitación reenviado al nuevo correo.":(newPwd?"Datos y contraseña actualizados":"Datos actualizados"),type:"ok"});
     }catch(e){console.error(e);setToast({msg:ERR,type:"err"});}
   }
   async function savePlan(plan){
@@ -848,8 +858,13 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
   async function doDelete(){
     if(readOnly)return; // demo_viewer: solo lectura
     if(!deleteConfirm)return;
+    const id=deleteConfirm.id;
     try{
-      await setUsers(users.filter(u=>u.id!==deleteConfirm.id));
+      // Borra la fila + la cuenta Auth (para que no queden cuentas huérfanas).
+      // Best-effort: si falla (ej. modo legacy sin Auth), el setUsers de abajo borra
+      // al menos la fila. Si funciona, ese setUsers queda como no-op sobre la fila.
+      await deleteClientAccount(id).catch(()=>{});
+      await setUsers(users.filter(u=>u.id!==id));
       setDeleteConfirm(null);setDetail(null);
       setToast({msg:"Cliente eliminado",type:"ok"});
     }catch(e){console.error(e);setToast({msg:ERR,type:"err"});setDeleteConfirm(null);}

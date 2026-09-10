@@ -51,8 +51,8 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const admin: any = createClient(PROJECT_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // Cliente destino + su organización.
-    const { data: client } = await admin.from("users").select("id, organization_id, name").eq("id", client_id).maybeSingle();
+    // Cliente destino + su organización + su cuenta Auth actual (si tenía).
+    const { data: client } = await admin.from("users").select("id, organization_id, name, auth_user_id").eq("id", client_id).maybeSingle();
     if (!client) return json({ error: "client_not_found" }, 404);
     if (!client.organization_id) return json({ error: "client_without_org" }, 400);
 
@@ -92,6 +92,14 @@ Deno.serve(async (req) => {
     // Vincular la cuenta Auth con la fila del cliente.
     const upd = await admin.from("users").update({ auth_user_id: authId, email: emailNorm }).eq("id", client_id);
     if (upd.error) return json({ error: "link_failed", detail: upd.error.message }, 400);
+
+    // Si el cliente tenía OTRA cuenta Auth (ej. se corrigió un correo mal escrito),
+    // se borra la vieja: invalida el link enviado al correo equivocado y evita cuentas
+    // huérfanas. Ya no está referenciada por la fila (se acaba de re-vincular arriba).
+    const oldAuthId = client.auth_user_id as string | null;
+    if (oldAuthId && oldAuthId !== authId) {
+      try { await admin.auth.admin.deleteUser(oldAuthId); } catch (_e) { /* tolerante */ }
+    }
 
     return json({ ok: true, invited });
   } catch (e) {

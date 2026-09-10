@@ -158,6 +158,23 @@ export async function inviteTrainer(email, name) {
   }
 }
 
+// Elimina por completo a un cliente: su fila y su cuenta Auth (para que no queden
+// cuentas huérfanas). Pasa por la Edge Function segura delete-client.
+export async function deleteClientAccount(clientId) {
+  try {
+    const { data, error } = await sb.functions.invoke("delete-client", { body: { client_id: clientId } });
+    if (error) {
+      let detail = error.message;
+      try { const b = await error.context?.json?.(); if (b?.error) detail = b.detail ? `${b.error}: ${b.detail}` : b.error; } catch { /* ignore */ }
+      return { ok: false, error: detail };
+    }
+    if (data?.error) return { ok: false, error: data.detail ? `${data.error}: ${data.detail}` : data.error };
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 // El OWNER administra a un co-entrenador: action = "reset_password" (con newPassword)
 // o "update_name" (con name). Pasa por la Edge Function segura manage-trainer.
 export async function manageTrainer({ action, targetUserId, newPassword, name }) {
