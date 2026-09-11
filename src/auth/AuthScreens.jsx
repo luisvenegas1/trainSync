@@ -82,8 +82,14 @@ export function SupabaseLogin({ onSubmit, formError }) {
     if (!email.trim()) { setResetErr("Escribí tu correo primero."); return; }
     setBusy(true);
     try {
-      // Vuelve a esta misma dirección; Supabase abre la sesión de recuperación.
-      const res = await sendPasswordReset(email.trim(), window.location.origin + "/");
+      // Vuelve al MISMO tenant; Supabase abre la sesión de recuperación ahí.
+      // OJO: window.location.origin NO incluye la ruta, así que en tenants por RUTA
+      // (trainingapp.tito-apps.com/tito-pruebas) hay que conservar el /slug; si no, el
+      // link vuelve a la raíz neutral, se pierde el hash del token y cae en el login.
+      // En subdominio (tito-pruebas.tito-apps.com) el origin ya identifica el tenant.
+      const segs = window.location.pathname.split("/").filter(Boolean);
+      const tenantBase = window.location.origin + (segs.length ? `/${segs[0]}/` : "/");
+      const res = await sendPasswordReset(email.trim(), tenantBase);
       if (res.ok) setResetMsg("Si el correo existe, te enviamos un enlace para restablecer tu contraseña. Revisá tu bandeja (y spam).");
       else setResetErr("No se pudo enviar: " + (res.error || "intentá de nuevo."));
     } finally {

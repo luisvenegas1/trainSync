@@ -53,12 +53,24 @@ defecto):**
 **Sender email** = `no-reply@tito-apps.com`. Si no, el correo llega con el nombre
 viejo del remitente (no tiene que ver con el branding de la app).
 
-## Paso 4 — Redirect URLs
-Supabase → **Authentication → URL Configuration → Redirect URLs**. Agregá:
-- `https://joheltraining.tito-apps.com/`
-- `https://trainingapp.tito-apps.com/`
-- `https://titotrainer.tito-apps.com/`
-- `http://localhost:5173/`
+## Paso 4 — Redirect URLs  ⚠️ IMPORTANTE (multi-tenant)
+Supabase → **Authentication → URL Configuration → Redirect URLs**.
+
+Las invitaciones (cliente, trainer, reset) mandan al usuario al SUBDOMINIO de su
+tenant (`slug.tito-apps.com`). Supabase SOLO respeta ese `redirectTo` si está en esta
+lista; si no, lo **descarta y usa el "Site URL"** por defecto — y el usuario cae en la
+org equivocada ("Organización incorrecta"). Por eso, en vez de listar cada tenant a
+mano (y que cada tenant nuevo se rompa), usá un **wildcard**:
+
+- `https://*.tito-apps.com/**`
+- `https://*.tito-apps.com`
+- `http://localhost:5173/**` (desarrollo)
+
+Con el wildcard, cualquier tenant (joheltraining, titotrainer, tito-pruebas, y los que
+vengan) redirige a SU propio subdominio sin tocar nada más.
+
+**Site URL:** dejalo en algo neutral como `https://trainingapp.tito-apps.com` (no un
+tenant puntual), para que cualquier fallback no aterrice en la org de un cliente real.
 
 ## Paso 5 — (opcional) Límites
 Con SMTP propio podés subir los límites de envío en **Authentication → Rate Limits**

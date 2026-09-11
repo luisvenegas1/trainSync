@@ -46,7 +46,12 @@ function MultiTenant({ children }) {
         // "Organización no encontrada" cuando el ícono instalado quedó apuntando a "/".
         let last = null;
         try { last = localStorage.getItem("ts_last_tenant"); } catch { /* ignore */ }
-        if (last) { window.location.replace("/" + last); return; }
+        // PRESERVAR query + hash: los flujos de Auth de Supabase (recuperación de
+        // contraseña, invitación) traen el token en el hash (#access_token...&type=
+        // recovery). Si redirigimos sin el hash, el token se pierde y el usuario cae
+        // en el login en vez de la pantalla de nueva contraseña. Con search+hash el
+        // tenant destino monta la app y procesa el flujo correctamente.
+        if (last) { window.location.replace("/" + last + window.location.search + window.location.hash); return; }
         if (alive) setState({ loading: false, status: "not_found", slug: null });
         return;
       }
