@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     if (!token) return json({ error: "missing_token" }, 401);
 
-    const { action, target_user_id, new_password, name } = await req.json();
+    const { action, target_user_id, new_password, name, org_id } = await req.json();
     if (!action || !target_user_id) return json({ error: "missing_fields" }, 400);
     if (!["reset_password", "update_name"].includes(action)) return json({ error: "bad_action" }, 400);
     if (action === "reset_password" && (!new_password || String(new_password).length < 8)) {
@@ -54,12 +54,25 @@ Deno.serve(async (req) => {
 
     const admin: SB = createClient(PROJECT_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // El caller debe ser OWNER de alguna organización.
-    const { data: ownerMembership } = await admin
-      .from("organization_members").select("organization_id")
-      .eq("user_id", callerId).eq("role", "owner").maybeSingle();
-    if (!ownerMembership) return json({ error: "forbidden_not_owner" }, 403);
-    const orgId = ownerMembership.organization_id;
+    // Org DESTINO explícita (el tenant que se administra). No se adivina por el caller.
+    let orgId: string | null = org_id || null;
+    const { data: superRow } = await admin
+      .from("platform_admins").select("user_id").eq("user_id", callerId).maybeSingle();
+    const isSuper = !!superRow;
+    if (!orgId) {
+      const { data: om } = await admin
+        .from("organization_members").select("organization_id")
+        .eq("user_id", callerId).eq("role", "owner").maybeSingle();
+      orgId = om?.organization_id || null;
+    }
+    if (!orgId) return json({ error: "missing_org" }, 400);
+    // Autorización: superadmin puede cualquier org; si no, debe ser OWNER de ESA org.
+    if (!isSuper) {
+      const { data: owns } = await admin
+        .from("organization_members").select("id")
+        .eq("user_id", callerId).eq("role", "owner").eq("organization_id", orgId).maybeSingle();
+      if (!owns) return json({ error: "forbidden_not_owner" }, 403);
+    }
 
     // El destino debe ser un 'trainer' (admin) de la MISMA organización.
     const { data: targetMembership } = await admin

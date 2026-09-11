@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
     if (!token) return json({ error: "missing_token" }, 401);
 
-    const { email, name } = await req.json();
+    const { email, name, org_id } = await req.json();
     if (!email) return json({ error: "missing_fields" }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) return json({ error: "bad_email" }, 400);
     const emailNorm = String(email).trim().toLowerCase();
@@ -53,12 +53,29 @@ Deno.serve(async (req) => {
 
     const admin: SB = createClient(PROJECT_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // Autorización: el caller debe ser OWNER de alguna organización.
-    const { data: ownerMembership } = await admin
-      .from("organization_members").select("organization_id, role")
-      .eq("user_id", callerId).eq("role", "owner").maybeSingle();
-    if (!ownerMembership) return json({ error: "forbidden_not_owner" }, 403);
-    const orgId = ownerMembership.organization_id;
+    // Org DESTINO: la que se está administrando (explícita). Nunca se adivina por el
+    // caller: si se derivara del caller, un superadmin en god-mode agregaría al admin
+    // en SU org y no en el tenant que está viendo (bug que mezcló tenants).
+    let orgId: string | null = org_id || null;
+    // ¿El caller es superadmin (soporte de plataforma)?
+    const { data: superRow } = await admin
+      .from("platform_admins").select("user_id").eq("user_id", callerId).maybeSingle();
+    const isSuper = !!superRow;
+    // Compat: si no se envió org_id, caer al org donde el caller es owner (comportamiento viejo).
+    if (!orgId) {
+      const { data: om } = await admin
+        .from("organization_members").select("organization_id")
+        .eq("user_id", callerId).eq("role", "owner").maybeSingle();
+      orgId = om?.organization_id || null;
+    }
+    if (!orgId) return json({ error: "missing_org" }, 400);
+    // Autorización: superadmin puede cualquier org; si no, debe ser OWNER de ESA org.
+    if (!isSuper) {
+      const { data: owns } = await admin
+        .from("organization_members").select("id")
+        .eq("user_id", callerId).eq("role", "owner").eq("organization_id", orgId).maybeSingle();
+      if (!owns) return json({ error: "forbidden_not_owner" }, 403);
+    }
 
     // Slug de la org para redirigir la invitación a su login.
     const { data: org } = await admin.from("organizations").select("slug").eq("id", orgId).maybeSingle();

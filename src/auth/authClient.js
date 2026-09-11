@@ -141,10 +141,10 @@ export async function inviteClient(clientId, email) {
 // El OWNER invita a un ADMIN/co-entrenador por correo. Pasa por la Edge Function
 // segura: crea/enlaza su cuenta Auth, lo agrega como miembro (role='trainer') y le
 // manda un correo para crear su contraseña. Devuelve { ok } o { ok:false, error }.
-export async function inviteTrainer(email, name) {
+export async function inviteTrainer(email, name, orgId) {
   try {
     const { data, error } = await sb.functions.invoke("invite-trainer", {
-      body: { email, name },
+      body: { email, name, org_id: orgId },
     });
     if (error) {
       let detail = error.message;
@@ -177,10 +177,10 @@ export async function deleteClientAccount(clientId) {
 
 // El OWNER administra a un co-entrenador: action = "reset_password" (con newPassword)
 // o "update_name" (con name). Pasa por la Edge Function segura manage-trainer.
-export async function manageTrainer({ action, targetUserId, newPassword, name }) {
+export async function manageTrainer({ action, targetUserId, newPassword, name, orgId }) {
   try {
     const { data, error } = await sb.functions.invoke("manage-trainer", {
-      body: { action, target_user_id: targetUserId, new_password: newPassword, name },
+      body: { action, target_user_id: targetUserId, new_password: newPassword, name, org_id: orgId },
     });
     if (error) {
       let detail = error.message;

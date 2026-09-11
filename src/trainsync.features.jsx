@@ -185,7 +185,7 @@ export function AdminsPage(){
     if(!form.name.trim()||!email){setErr("Nombre y correo son requeridos");return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){setErr("Correo inválido");return;}
     setErr("");setBusy(true);
-    const res=await inviteTrainer(email,form.name.trim());
+    const res=await inviteTrainer(email,form.name.trim(),orgId);
     setBusy(false);
     if(!res.ok){setErr(res.error||"No se pudo invitar. Intentá de nuevo.");return;}
     setForm({name:"",email:""});setShowAdd(false);
@@ -204,12 +204,12 @@ export function AdminsPage(){
     setErr("");setBusy(true);
     try{
       if(eForm.name.trim()&&eForm.name.trim()!==(editing.name||"")){
-        const r=await manageTrainer({action:"update_name",targetUserId:editing.userId,name:eForm.name.trim()});
+        const r=await manageTrainer({action:"update_name",targetUserId:editing.userId,name:eForm.name.trim(),orgId});
         if(!r.ok){setBusy(false);setErr(r.error||"No se pudo actualizar el nombre.");return;}
       }
       if(eForm.pwd){
         if(eForm.pwd.length<8){setBusy(false);setErr("La contraseña debe tener al menos 8 caracteres.");return;}
-        const r=await manageTrainer({action:"reset_password",targetUserId:editing.userId,newPassword:eForm.pwd});
+        const r=await manageTrainer({action:"reset_password",targetUserId:editing.userId,newPassword:eForm.pwd,orgId});
         if(!r.ok){setBusy(false);setErr(r.error||"No se pudo cambiar la contraseña.");return;}
       }
       setBusy(false);setEditing(null);setToast({msg:"Administrador actualizado",type:"ok"});reload();
