@@ -27,6 +27,15 @@ describe("Recordatorios manuales y aviso de SaaS", () => {
     cy.get('[data-cy="reminder-history"]', { timeout: 15000 }).should("be.visible");
   });
 
+  it("TC-66b El historial muestra el botón de reenviar solo en los últimos 30 días", () => {
+    cy.login("coach1-gimnasio-premium@test.local", "password123", "/gimnasio-premium");
+    cy.get('[data-cy="nav-reminders"]', { timeout: 15000 }).click();
+    // Hay un recordatorio reciente (sembrado) → botón de reenviar visible.
+    cy.get('[data-cy="resend-reminder"]', { timeout: 15000 }).should("exist");
+    // Y uno de hace >30 días → en su lugar aparece "+30d" (no reenviar).
+    cy.get('[data-cy="reminder-history"]').contains("+30d").should("exist");
+  });
+
   it("TC-67 El superadmin ve el aviso de pago del SaaS en el detalle de la org", () => {
     cy.login("super@test.local", "password123", "/platform");
     cy.contains("Organizaciones", { timeout: 15000 }).click();

@@ -836,9 +836,9 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
 
     {tab==="plan"&&<><PlanEditor client={client} onSave={savePlan}/>
       <div className="card" style={{marginTop:12}}>
-        <label style={{display:"flex",alignItems:"center",gap:10,cursor:readOnly?"default":"pointer"}}>
-          <input data-cy="client-exempt" type="checkbox" checked={!!client.billingExempt} onChange={e=>toggleExempt(e.target.checked)} disabled={readOnly} style={{width:18,height:18}}/>
-          <span><span style={{fontWeight:700,color:"#0B1F4B"}}>Eximir del bloqueo por vencimiento</span><br/><span style={{fontSize:12,color:"#6B7A99"}}>Este cliente verá su rutina aunque su mensualidad esté vencida (solo aplica si activaste el bloqueo en Recordatorios).</span></span>
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:readOnly?"default":"pointer"}}>
+          <input data-cy="client-exempt" type="checkbox" checked={!!client.billingExempt} onChange={e=>toggleExempt(e.target.checked)} disabled={readOnly} style={{width:18,height:18,flexShrink:0,marginTop:2}}/>
+          <span style={{lineHeight:1.5}}><span style={{fontWeight:700,color:"#0B1F4B"}}>Eximir del bloqueo por vencimiento</span><br/><span style={{fontSize:12,color:"#6B7A99"}}>Este cliente verá su rutina aunque su mensualidad esté vencida (solo aplica si activaste el bloqueo en Recordatorios).</span></span>
         </label>
       </div></>}
     {tab==="payments"&&<>

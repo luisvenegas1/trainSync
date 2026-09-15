@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTenant } from "../tenant/tenantContext";
 import { usePermissions } from "../auth/PermissionsContext";
 import { PlanGate } from "../plans/PlanGate";
-import { getOrgReminderConfig, setOrgReminderConfig, getOrgPaymentConfig, setOrgPaymentConfig, getReminderLogs } from "../db";
+import { getOrgReminderConfig, setOrgReminderConfig, getOrgPaymentConfig, setOrgPaymentConfig, getReminderLogs, sendManualReminder } from "../db";
 import { Toast } from "../trainsync.ui";
+
+const RESEND_WINDOW_DAYS = 30; // no se puede reenviar un recordatorio de hace más de 30 días
 
 function fmtDateTime(s) {
   if (!s) return "—";
@@ -12,37 +14,63 @@ function fmtDateTime(s) {
 }
 
 // Historial de recordatorios enviados (automáticos + manuales) de la organización.
-function ReminderHistory({ orgId }) {
+// Permite REENVIAR un recordatorio (solo si se envió hace ≤ 30 días); al reenviar se
+// agrega una fila nueva (tipo Manual) con la info del envío recién hecho.
+function ReminderHistory({ orgId, readOnly }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      await Promise.resolve();
-      try { const r = await getReminderLogs(orgId); if (alive) setRows(r); }
-      catch { if (alive) setRows([]); }
-      finally { if (alive) setLoading(false); }
-    })();
-    return () => { alive = false; };
+  const [busyId, setBusyId] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await getReminderLogs(orgId);
+      // Calcular acá (no en render) si cada uno se puede reenviar (≤ 30 días).
+      const now = Date.now();
+      setRows(r.map((x) => {
+        const d = new Date(x.sentAt || x.createdAt);
+        const canResend = !isNaN(d) && (now - d.getTime()) <= RESEND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+        return { ...x, canResend };
+      }));
+    } catch { setRows([]); }
+    finally { setLoading(false); }
   }, [orgId]);
+  useEffect(() => { let alive = true; (async () => { await Promise.resolve(); if (alive) await load(); })(); return () => { alive = false; }; }, [load]);
+
+  async function resend(r) {
+    if (readOnly) { setToast({ msg: "Modo demostración: solo lectura", type: "err" }); return; }
+    setBusyId(r.id);
+    try {
+      await sendManualReminder(r.clientId);
+      setToast({ msg: "Recordatorio reenviado a " + r.clientName, type: "ok" });
+      await load(); // aparece la fila nueva del reenvío
+    } catch (e) { setToast({ msg: "No se pudo reenviar: " + (e?.message || e), type: "err" }); }
+    finally { setBusyId(null); }
+  }
 
   const badge = (st) => st === "sent" ? { t: "Enviado", c: "bd-green" } : st === "failed" ? { t: "Falló", c: "bd-red" } : { t: "Pendiente", c: "bd-gray" };
   return (
     <div style={{ marginTop: 28 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
       <div className="pt" style={{ fontSize: 18 }}>Historial de recordatorios</div>
-      <div className="ps" style={{ marginBottom: 12 }}>Qué recordatorios se enviaron, a quién y cuándo (automáticos y manuales)</div>
+      <div className="ps" style={{ marginBottom: 12 }}>Qué recordatorios se enviaron, a quién y cuándo. Podés reenviar los de los últimos {RESEND_WINDOW_DAYS} días.</div>
       <div className="card" data-cy="reminder-history" style={{ padding: 0 }}>
         {loading ? <div style={{ padding: 16, textAlign: "center", color: "#6B7A99" }}>Cargando…</div>
           : rows.length === 0 ? <div style={{ padding: 16, textAlign: "center", color: "#6B7A99", fontSize: 13 }}>Todavía no se enviaron recordatorios.</div>
           : <div className="tbl-wrap"><table className="tbl">
-              <thead><tr><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Fecha</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Tipo</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
               <tbody>
-                {rows.map((r) => { const b = badge(r.status); return (
+                {rows.map((r) => { const b = badge(r.status); const can = r.canResend; return (
                   <tr key={r.id}>
                     <td><strong>{r.clientName}</strong></td>
                     <td><span className="badge bd-gray">{r.type === "manual" ? "Manual" : "Automático"}</span></td>
                     <td><span className={`badge ${b.c}`}>{b.t}</span>{r.status === "failed" && r.error ? <div style={{ fontSize: 10, color: "#E53935" }}>{r.error}</div> : null}</td>
                     <td style={{ fontSize: 12, color: "#6B7A99" }}>{fmtDateTime(r.sentAt || r.createdAt)}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {!readOnly && (can
+                        ? <button className="btn btn-s btn-sm" data-cy="resend-reminder" disabled={busyId === r.id} onClick={() => resend(r)}>{busyId === r.id ? "Enviando…" : "↻ Reenviar"}</button>
+                        : <span style={{ fontSize: 11, color: "#9AA7BD" }}>+{RESEND_WINDOW_DAYS}d</span>)}
+                    </td>
                   </tr>); })}
               </tbody>
             </table></div>}
@@ -78,7 +106,7 @@ export function RemindersPage() {
       </div>
       {/* Historial a lo ancho, debajo de ambas columnas. */}
       <PlanGate feature="payment_reminders">
-        <ReminderHistory orgId={orgId} />
+        <ReminderHistory orgId={orgId} readOnly={readOnly} />
       </PlanGate>
     </div>
   );

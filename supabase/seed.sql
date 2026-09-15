@@ -197,5 +197,17 @@ begin
   update public.users set active_routine_id = 'rout_base_blk' where id = 'client_gimnasio_base_5';
 end $$;
 
+-- ── Historial de recordatorios para gimnasio-premium (para probar el reenvío) ──
+-- Uno RECIENTE (se puede reenviar) y uno de hace >30 días (no se puede).
+do $$
+declare org_prem uuid := (select id from public.organizations where slug = 'gimnasio-premium');
+begin
+  if org_prem is null then return; end if;
+  insert into public.payment_reminder_logs
+    (organization_id, client_id, due_date, reminder_type, scheduled_for, sent_at, status, created_at) values
+    (org_prem, 'client_gimnasio_premium_2', current_date + 3, 'pre_due', current_date, now(), 'sent', now()),
+    (org_prem, 'client_gimnasio_premium_2', current_date - 37, 'pre_due', current_date - 40, now() - interval '40 days', 'sent', now() - interval '40 days');
+end $$;
+
 -- Limpieza del helper temporal.
 drop function if exists public._seed_auth_user(uuid, text, text, text);
