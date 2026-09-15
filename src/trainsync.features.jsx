@@ -9,11 +9,12 @@ import { usePermissions } from "./auth/PermissionsContext";
 import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanStatusFromEndDate, initials, planColor, useLS, hashPassword, generatePassword, useSaving, weekKey, weekLabel, monthKey, monthLabel, dayKey, fmtDuration, convertWeight } from "./trainsync.utils";
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
 import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer, deleteClientAccount } from "./auth/authClient";
-import { setClientReminder, getOrgAdmins, removeOrgAdmin } from "./db";
+import { setClientReminder, getOrgAdmins, removeOrgAdmin, setClientBillingExempt, sendManualReminder } from "./db";
 import { uploadRoutineImage } from "./storage/storage";
 import { MedalsView, MedalCelebration } from "./gamification/GamificationUI";
 import { weeklyCountFor, medalUnlocked, weeklyGoalFor } from "./gamification/medals";
 import { initialWeightFor } from "./workout/lastWeights";
+import { routineBlocked } from "./access/paymentAccess";
 import { useTenant } from "./tenant/tenantContext";
 import { useBranding } from "./branding/BrandingContext";
 import { PlanGate } from "./plans/PlanGate";
@@ -676,7 +677,7 @@ function EditClientModal({cForm,setCForm,onSave,onClose,saving=false}){
 
 // ── CLIENT DETAIL ──
 export function ClientDetail({client,setClient,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,routines,onBack,onDelete,deleteConfirm,setDeleteConfirm,doDelete}){
-  const{readOnly}=usePermissions();
+  const{readOnly,features}=usePermissions();
   const[tab,setTab]=useState("info");
   const[showEditInfo,setShowEditInfo]=useState(false);
   const[cForm,setCForm]=useState({...client});
@@ -685,6 +686,15 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
   const ERR="Hubo un problema al guardar. Intentá de nuevo en unos minutos.";
 
   const[disableConfirm,setDisableConfirm]=useState(false);
+  const[reminderConfirm,setReminderConfirm]=useState(false);
+  async function doSendReminder(){
+    if(readOnly){setToast({msg:"Modo demostración: solo lectura",type:"err"});return;}
+    try{
+      await sendManualReminder(client.id);
+      setReminderConfirm(false);
+      setToast({msg:"Recordatorio enviado a "+(client.email||"el cliente"),type:"ok"});
+    }catch(e){setReminderConfirm(false);setToast({msg:"No se pudo enviar: "+(e?.message||e),type:"err"});}
+  }
 
   async function saveInfo(){
     if(readOnly){setToast({msg:"Modo demostración: solo lectura",type:"err"});return;}
@@ -735,6 +745,14 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
       setToast({msg:next?"Usuario deshabilitado":"Usuario habilitado",type:"ok"});
     }catch(e){console.error(e);setToast({msg:ERR,type:"err"});}
   }
+  async function toggleExempt(next){
+    if(readOnly){setToast({msg:"Modo demostración: solo lectura",type:"err"});return;}
+    try{
+      await setClientBillingExempt(client.id,next); // columna dedicada
+      setClient({...client,billingExempt:next});    // refresca el estado local
+      setToast({msg:next?"Cliente eximido del bloqueo por vencimiento":"Exención retirada",type:"ok"});
+    }catch(e){console.error(e);setToast({msg:ERR,type:"err"});}
+  }
 
   const routine=routines.find(r=>r.userId===client.id);
   const dl=daysLeft(client.plan?.endDate);
@@ -782,6 +800,17 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
         <button className="btn btn-g" onClick={()=>setDisableConfirm(false)}>Cancelar</button>
       </div>
     </Modal>}
+    {reminderConfirm&&<Modal title="Enviar recordatorio de pago" onClose={()=>setReminderConfirm(false)}>
+      <div style={{textAlign:"center",padding:"8px 0 16px"}}>
+        <div style={{fontSize:40,marginBottom:12}}>📧</div>
+        <div style={{fontSize:15,fontWeight:700,color:"#0B1F4B",marginBottom:8}}>¿Enviar un recordatorio a {client.name}?</div>
+        <div style={{fontSize:13,color:"#6B7A99"}}>Se le enviará el correo de recordatorio de pago a <strong>{client.email}</strong> ahora mismo.</div>
+      </div>
+      <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+        <SaveBtn className="btn btn-p" data-cy="send-reminder-confirm" onClick={()=>wrap(doSendReminder)} saving={saving}>Sí, enviar</SaveBtn>
+        <button className="btn btn-g" onClick={()=>setReminderConfirm(false)}>Cancelar</button>
+      </div>
+    </Modal>}
     {deleteConfirm&&<Modal title="⚠️ Eliminar cliente" onClose={()=>setDeleteConfirm(null)}>
       <div style={{textAlign:"center",padding:"8px 0 16px"}}>
         <div style={{fontSize:40,marginBottom:12}}>🗑️</div>
@@ -805,8 +834,23 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
       <div style={{marginTop:10,fontSize:12,color:"#6B7A99"}}>Rutina: <strong style={{color:"#0B1F4B"}}>{routine?routine.title:"Sin rutina"}</strong></div>
     </div>)}
 
-    {tab==="plan"&&<PlanEditor client={client} onSave={savePlan}/>}
-    {tab==="payments"&&<div className="card"><PaymentModule client={client} setClient={setClient} payments={payments} setPayments={setPayments}/></div>}
+    {tab==="plan"&&<><PlanEditor client={client} onSave={savePlan}/>
+      <div className="card" style={{marginTop:12}}>
+        <label style={{display:"flex",alignItems:"center",gap:10,cursor:readOnly?"default":"pointer"}}>
+          <input data-cy="client-exempt" type="checkbox" checked={!!client.billingExempt} onChange={e=>toggleExempt(e.target.checked)} disabled={readOnly} style={{width:18,height:18}}/>
+          <span><span style={{fontWeight:700,color:"#0B1F4B"}}>Eximir del bloqueo por vencimiento</span><br/><span style={{fontSize:12,color:"#6B7A99"}}>Este cliente verá su rutina aunque su mensualidad esté vencida (solo aplica si activaste el bloqueo en Recordatorios).</span></span>
+        </label>
+      </div></>}
+    {tab==="payments"&&<>
+      {features?.payment_reminders&&!readOnly&&<div className="card" style={{marginBottom:12,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:180}}>
+          <div style={{fontWeight:700,color:"#0B1F4B",fontSize:13}}>📧 Recordatorio de pago</div>
+          <div style={{fontSize:12,color:"#6B7A99"}}>Enviá un correo de recordatorio al cliente ahora mismo{client.email?"":" (falta cargar su correo)"}.</div>
+        </div>
+        <button className="btn btn-s btn-sm" data-cy="send-reminder" disabled={!client.email} onClick={()=>setReminderConfirm(true)}>Enviar ahora</button>
+      </div>}
+      <div className="card"><PaymentModule client={client} setClient={setClient} payments={payments} setPayments={setPayments}/></div>
+    </>}
     {tab==="workouts"&&<WorkoutHistory sessions={workoutSessions.filter(s=>s.userId===client.id)} onDeleteSession={(setWorkoutSessions&&!readOnly)?async id=>{
       if(!confirm("¿Eliminar este entrenamiento del historial?"))return;
       try{await setWorkoutSessions(workoutSessions.filter(s=>s.id!==id));setToast({msg:"Entrenamiento eliminado",type:"ok"});}
@@ -1116,7 +1160,7 @@ export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=fals
     <button className="back-btn" onClick={onBack}>← Volver a Rutinas</button>
     <div className="ph"><div><div className="pt">{routine?"Editar Rutina":"Nueva Rutina"}</div></div>{readOnly?<span className="badge" style={{background:"#F3E5F5",color:"#7B1FA2",border:"1px solid #E1BEE7"}}>👀 Solo lectura</span>:<SaveBtn className="btn btn-ok" onClick={saveRoutine} saving={saving}>💾 Guardar</SaveBtn>}</div>
     <div className="card" style={{marginBottom:12}}>
-      <div className="fg"><label>Título</label><input className="inp" value={rt.title} onChange={e=>setRt(r=>({...r,title:e.target.value}))}/></div>
+      <div className="fg"><label>Título</label><input data-cy="rt-title" className="inp" value={rt.title} onChange={e=>setRt(r=>({...r,title:e.target.value}))}/></div>
       <div className="fg">
         <label>Asignar a clientes ({(rt.assignedUserIds||[]).length})</label>
         <div style={{maxHeight:190,overflowY:"auto",border:"1px solid #DDE4F0",borderRadius:8,padding:"4px 6px"}}>
@@ -1133,11 +1177,11 @@ export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=fals
             </div>);})}
           {clientsList.length===0&&<div style={{fontSize:12,color:"#6B7A99",padding:8}}>No hay clientes disponibles</div>}
         </div>
-        <div style={{fontSize:10,color:"#6B7A99",marginTop:4}}>La misma rutina puede asignarse a varios clientes. La marca "activa" es independiente por cliente.</div>
+        <div style={{fontSize:10,color:"#6B7A99",marginTop:4}}>La misma rutina puede asignarse a varios clientes. La marca <strong>⭐ Activa</strong> define cuál es la rutina que el cliente ve <strong>primero</strong> al entrar (es independiente por cliente; cada cliente tiene una sola activa).</div>
       </div>
       <div className="fr2">
         <div className="fg"><label>Días por semana</label>
-          <select className="sel" value={rt.daysPerWeek} onChange={e=>updateDays(Number(e.target.value))}>
+          <select data-cy="rt-days" className="sel" value={rt.daysPerWeek} onChange={e=>updateDays(Number(e.target.value))}>
             <option value={0}>— Seleccionar días —</option>
             {[1,2,3,4,5,6,7].map(n=><option key={n} value={n}>{n} {n===1?"día":"días"}</option>)}
           </select>
@@ -1195,7 +1239,7 @@ export function RoutineEditor({routine,exercises,users,onSave,onBack,saving=fals
     </>}
     {rt.days.length===0&&<div className="card"><div className="empty"><div className="ico">📅</div><p>Selecciona los días por semana arriba</p></div></div>}
     <div style={{display:"flex",gap:8,marginTop:14,paddingTop:14,borderTop:"1px solid #DDE4F0"}}>
-      {!readOnly&&<SaveBtn className="btn btn-ok" onClick={saveRoutine} saving={saving}>💾 Guardar rutina</SaveBtn>}
+      {!readOnly&&<SaveBtn className="btn btn-ok" data-cy="rt-save" onClick={saveRoutine} saving={saving}>💾 Guardar rutina</SaveBtn>}
       <button className="btn btn-g" onClick={onBack}>{readOnly?"← Volver":"Cancelar"}</button>
     </div>
     {exPicker&&<ExercisePicker exercises={exercises} onPick={ex=>addEx(exPicker.dayIdx,exPicker.gIdx,ex)} onClose={()=>setExPicker(null)}/>}
@@ -1722,6 +1766,8 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
   const tenant=useTenant();
   const gamification=tenant?.gamification||{};
   const medalsOn=!!(features?.challenges&&gamification.enabled);
+  // Bloqueo por mensualidad vencida (opt-in por org): oculta SOLO la rutina.
+  const blocked=routineBlocked({plan:user.plan,orgConfig:tenant?.payment,billingExempt:user.billingExempt});
 
   // Sort: active first, then by createdAt desc
   const userRoutines=routines
@@ -1776,6 +1822,10 @@ export function MyRoutinePage({user,routines,exercises,workoutSessions=[],setWor
     if(activeWorkout)return null;
     return<button className="btn btn-ok btn-sm" onClick={()=>startWorkout(day)}>▶ Iniciar</button>;
   }
+
+  // Mensualidad vencida y la org activó el bloqueo → se oculta la rutina (el perfil
+  // y el historial siguen accesibles). Cae también si hay un entrenamiento en curso.
+  if(blocked)return(<div data-cy="routine-blocked"><div className="ph"><div className="pt">Mi Rutina</div></div><div className="card"><div className="empty"><div className="ico">🔒</div><p style={{fontWeight:700,color:"#0B1F4B",marginBottom:6}}>Tu mensualidad está vencida</p><p>Para volver a ver tu rutina y entrenar, ponte al día con tu pago.<br/>Escribile a tu entrenador para renovar. Tu perfil e historial siguen disponibles.</p></div></div></div>);
 
   if(!activeRoutine)return(<div><div className="ph"><div className="pt">Mi Rutina</div></div><div className="card"><div className="empty"><div className="ico">📋</div><p>Tu entrenador aún no te ha asignado una rutina.<br/>¡Pronto llegará tu plan!</p></div></div></div>);
 
@@ -1869,6 +1919,13 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
   const clientMsAsc=measurements.filter(m=>m.clientId===user.id).sort((a,b)=>new Date(a.date)-new Date(b.date));
   const clientMsDesc=[...clientMsAsc].reverse();
   const latest=clientMsDesc[0];
+  // Historial solo-lectura: si el cliente ya tiene mediciones, las sigue viendo aunque
+  // su plan actual no incluya la función (p.ej. lo transfirieron a un tenant Base). El
+  // coach igual no puede agregar nuevas (eso lo gatea el plan en la vista del coach).
+  const hasMs=clientMsAsc.length>0;
+  const showMeasures=!!(features?.measurements||hasMs);
+  const showHistory=!!(features?.analytics||hasMs);
+  const msReadOnly=hasMs&&!features?.measurements; // hay datos pero el plan no incluye la función
 
   async function saveProfile(){
     try{
@@ -1922,7 +1979,7 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
     </div>
 
     <div className="tabs">
-      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],...(showMedals?[["medals","🏅 Medallas"]]:[]),...(features?.measurements?[["measurements","📊 Mediciones"]]:[]),...(features?.analytics?[["history","📈 Historial"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
+      {[["info","👤 Info"],["workouts","🏋️ Entrenos"],...(showMedals?[["medals","🏅 Medallas"]]:[]),...(showMeasures?[["measurements","📊 Mediciones"]]:[]),...(showHistory?[["history","📈 Historial"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
     </div>
 
     {tab==="info"&&(<div>
@@ -1972,12 +2029,14 @@ export function MyProfilePage({user,setUsers,users,measurements,workoutSessions=
 
     {tab==="medals"&&showMedals&&<MedalsView sessions={workoutSessions} clientId={user.id} gamification={gamification} goal={weeklyGoalFor(user,routines)} clients={users.filter(u=>u.role!=="trainer")} challenges={challenges}/>}
 
-    {tab==="measurements"&&features?.measurements&&(<div>
+    {tab==="measurements"&&showMeasures&&(<div>
+      {msReadOnly&&<div style={{fontSize:12,color:"#8A6D3B",background:"#FFF8E1",border:"1px solid #FFE082",borderRadius:8,padding:"8px 10px",marginBottom:10}}>📁 Historial de tu plan anterior (solo lectura). Tu plan actual no incluye mediciones nuevas.</div>}
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Última medición{latest?` — ${fmtDate(latest.date)}`:""}</div>
       {latest?(<div className="m-grid">{MEASUREMENT_FIELDS.map(f=>{const v=latest[f.key];return v?(<div key={f.key} className="m-card"><div className="m-lbl">{f.label}</div><div className="m-val">{v}<span className="m-unit"> {f.unit}</span></div></div>):null;})}</div>):<div className="empty"><div className="ico">📊</div><p>Sin mediciones registradas aún</p></div>}
     </div>)}
 
-    {tab==="history"&&features?.analytics&&(<div>
+    {tab==="history"&&showHistory&&(<div>
+      {msReadOnly&&<div style={{fontSize:12,color:"#8A6D3B",background:"#FFF8E1",border:"1px solid #FFE082",borderRadius:8,padding:"8px 10px",marginBottom:10}}>📁 Historial de tu plan anterior (solo lectura).</div>}
       {clientMsAsc.length>1&&<MultiChart clientMs={clientMsAsc}/>}
       <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>Historial ({clientMsAsc.length})</div>
       {clientMsDesc.map(m=>(<div key={m.id} className="hist-row"><div className="hist-date">{fmtDate(m.date)}</div><div className="hist-vals">{MEASUREMENT_FIELDS.map(f=>m[f.key]&&<span key={f.key} className="hist-val">{f.label.split(" ")[0]}: {m[f.key]}{f.unit}</span>)}</div></div>))}

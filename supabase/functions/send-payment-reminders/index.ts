@@ -19,8 +19,8 @@
 // ═══════════════════════════════════════════════════════════════
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const PROJECT_URL = Deno.env.get("PROJECT_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY")!;
+const PROJECT_URL = Deno.env.get("PROJECT_URL") || Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") || "";
 const REMINDER_FROM = Deno.env.get("REMINDER_FROM") || "TrainSync <no-reply@tito-apps.com>";

@@ -25,9 +25,11 @@
 // ═══════════════════════════════════════════════════════════════
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const PROJECT_URL = Deno.env.get("PROJECT_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY")!; // solo servidor
-const ANON_KEY = Deno.env.get("ANON_KEY")!;
+// En prod usa los secrets propios (PROJECT_URL/...); en LOCAL cae a las variables que
+// Supabase inyecta solo (SUPABASE_*), así las functions corren en local sin config extra.
+const PROJECT_URL = Deno.env.get("PROJECT_URL") || Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // solo servidor
+const ANON_KEY = Deno.env.get("ANON_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",

@@ -33,7 +33,11 @@ export function useSupabaseAuth(tenant) {
       try {
         const { data: { user } } = await sb.auth.getUser();
         if (!user) {
-          setState({ status: "invalid_session" });
+          // Había una sesión guardada pero ya no es válida (token viejo/expirado, o
+          // Supabase reiniciado en local). La limpiamos y mandamos al login en vez de
+          // dejar una pantalla muerta de "Sesión inválida" que vuelve al refrescar.
+          try { await doSignOut(); } catch { /* ignore */ }
+          setState({ status: "anonymous" });
           return;
         }
         const [memberships, client, isSuperadmin] = await Promise.all([
@@ -77,9 +81,16 @@ export function useSupabaseAuth(tenant) {
     let alive = true;
     let unsub = null;
     (async () => {
-      const session = await getSession();
-      if (!alive) return;
-      await resolve(session);
+      try {
+        const session = await getSession();
+        if (!alive) return;
+        await resolve(session);
+      } catch (e) {
+        // Si getSession falla (token corrupto en storage, etc.), no dejar la app
+        // colgada en "cargando": limpiar y mandar al login.
+        console.error("auth init:", e);
+        if (alive) setState({ status: "anonymous" });
+      }
       unsub = onAuthChange((s) => {
         if (alive) resolve(s);
       });

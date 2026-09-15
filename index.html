@@ -32,7 +32,9 @@
     // Registro del service worker con AUTO-ACTUALIZACIÓN: cuando se despliega una
     // versión nueva, se detecta y la página se recarga sola una vez, para que el
     // usuario nunca quede viendo una versión vieja cacheada.
-    if ('serviceWorker' in navigator) {
+    // No registrar el SW cuando corre Cypress: su auto-recarga interfiere con las
+    // pruebas E2E (la página se recarga a mitad de carga). No afecta a usuarios reales.
+    if ('serviceWorker' in navigator && !window.Cypress) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
           .then(reg => {

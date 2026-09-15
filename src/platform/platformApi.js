@@ -30,6 +30,18 @@ export async function invokePlatform(action, payload = {}) {
   }
 }
 
+// Clientes (users) de una organización, para el panel de transferencia entre tenants.
+export async function loadOrgClients(orgId) {
+  if (!orgId) return [];
+  const { data, error } = await sb
+    .from("users")
+    .select("id, name, email, organization_id")
+    .eq("organization_id", orgId)
+    .order("name");
+  if (error) throw error;
+  return data || [];
+}
+
 // Carga TODO lo necesario para el panel y lo agrega por organización.
 export async function loadPlatformData() {
   const [orgsR, subsR, membersR, profilesR, usersR, settingsR, paymentsR, auditR] = await Promise.all([

@@ -5,7 +5,9 @@ import { dirname, resolve } from "node:path";
 import { routinesSelectAllowed } from "./routinesAccess";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const mig0021 = resolve(here, "../../supabase/migrations/0021_platform_admin_reads.sql");
+// Las migraciones históricas (ya aplicadas en prod) viven en migrations_archive/
+// desde que adoptamos un baseline para desarrollo local. Este test valida el SQL de 0021.
+const mig0021 = resolve(here, "../../supabase/migrations_archive/0021_platform_admin_reads.sql");
 
 describe("routines_select — no se pierde el acceso a rutinas asignadas (0018 + 0021)", () => {
   it("un cliente ASIGNADO (no dueño legacy) SÍ puede leer su rutina", () => {

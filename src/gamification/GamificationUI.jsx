@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTenant } from "../tenant/tenantContext";
 import { usePermissions } from "../auth/PermissionsContext";
-import { setOrgGamification, getChallengeLeaderboard } from "../db";
+import { setOrgGamification, getOrgGamification, getChallengeLeaderboard } from "../db";
 import { Toast } from "../trainsync.ui";
 import { computeMedals, weeklyGoalFor, DEFAULT_GOAL_PCT, MEDAL_META } from "./medals";
 import { computeLeaderboard, rankLeaderboard, isChallengeActive, rankOf, wonChallenges, RANK_EMOJI } from "./challenges";
@@ -25,7 +25,7 @@ export function MedalCelebration({ medal, onClose }) {
   const confetti = Array.from({ length: 28 });
   const colors = ["#D4A017", "#8A94A6", "#B87333", "#1A5DC8", "#4ADE80", "#F87171"];
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(11,31,75,0.72)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", animation: "medalFade .3s ease" }}>
+    <div data-cy="medal-celebration" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(11,31,75,0.72)", backdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", animation: "medalFade .3s ease" }}>
       <style>{`
         @keyframes medalFade{from{opacity:0}to{opacity:1}}
         @keyframes medalPop{0%{transform:scale(0) rotate(-40deg);opacity:0}60%{transform:scale(1.25) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
@@ -128,6 +128,26 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
   const [toast, setToast] = useState(null);
   const setN = (k) => (e) => setPct((w) => ({ ...w, [k]: e.target.value }));
 
+  // Al montar, refrescar la config desde la BD (tenant.gamification se carga al login
+  // y queda viejo al navegar entre páginas). Así el toggle refleja lo guardado sin recargar.
+  useEffect(() => {
+    if (!orgId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const gc = await getOrgGamification(orgId);
+        if (!alive || !gc) return;
+        setEnabled(!!gc.enabled);
+        if (gc.goalPct) setPct({
+          bronze: gc.goalPct.bronze || DEFAULT_GOAL_PCT.bronze,
+          silver: gc.goalPct.silver || DEFAULT_GOAL_PCT.silver,
+          gold: gc.goalPct.gold || DEFAULT_GOAL_PCT.gold,
+        });
+      } catch { /* mantiene el valor inicial del tenant */ }
+    })();
+    return () => { alive = false; };
+  }, [orgId]);
+
   // Formulario de reto nuevo
   const blank = { title: "", prize: "", startsOn: todayISO(), endsOn: plusDaysISO(30), visibleToClients: true };
   const [form, setForm] = useState(blank);
@@ -173,7 +193,7 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontWeight: 800, color: "#0B1F4B", marginBottom: 8 }}>🏅 Medallas automáticas</div>
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 12 }}>
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={readOnly} style={{ width: 18, height: 18 }} />
+          <input data-cy="medals-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={readOnly} style={{ width: 18, height: 18 }} />
           <span style={{ fontWeight: 700, color: "#0B1F4B" }}>Activar medallas para mis clientes</span>
         </label>
         <div style={{ fontSize: 12, color: "#6B7A99", marginBottom: 10 }}>Cada cliente tiene una meta = los <strong>días/semana de su rutina</strong>. La medalla depende de qué % de su meta cumple en la semana:</div>
@@ -190,7 +210,7 @@ export function ChallengesPage({ clients = [], sessions = [], challenges = [], r
           ))}
         </div>
         <div style={{ fontSize: 11, color: "#6B7A99", marginTop: 8, background: "#F8FAFC", borderRadius: 8, padding: "6px 10px" }}>Ejemplo: meta de 4 días → 🥉 {Math.ceil(4 * (Number(pct.bronze) || 50) / 100)}, 🥈 {Math.ceil(4 * (Number(pct.silver) || 75) / 100)}, 🥇 {Math.ceil(4 * (Number(pct.gold) || 100) / 100)} entrenos.</div>
-        <button className="btn btn-p" style={{ marginTop: 10 }} onClick={saveConfig} disabled={saving || readOnly}>{saving ? "Guardando…" : "Guardar medallas"}</button>
+        <button data-cy="medals-save" className="btn btn-p" style={{ marginTop: 10 }} onClick={saveConfig} disabled={saving || readOnly}>{saving ? "Guardando…" : "Guardar medallas"}</button>
       </div>
 
       {/* Retos */}

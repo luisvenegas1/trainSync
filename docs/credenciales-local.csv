@@ -1,0 +1,37 @@
+Organizacion,Plan,URL local,Rol,Nombre,Email,Contrasena
+Plataforma,-,http://localhost:5173/platform,Superadmin,Superadmin,super@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Owner,Coach 1 Gimnasio Premium,coach1-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Trainer,Coach 2 Gimnasio Premium,coach2-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Cliente,Cliente 1 Gimnasio Premium,cliente1-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Cliente,Cliente 2 Gimnasio Premium,cliente2-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Cliente,Cliente 3 Gimnasio Premium,cliente3-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Cliente,Cliente 4 Gimnasio Premium,cliente4-gimnasio-premium@test.local,password123
+Gimnasio Premium,premium,http://localhost:5173/gimnasio-premium,Cliente,Cliente 5 Gimnasio Premium,cliente5-gimnasio-premium@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Owner,Coach 1 Gimnasio Pro,coach1-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Trainer,Coach 2 Gimnasio Pro,coach2-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Cliente,Cliente 1 Gimnasio Pro,cliente1-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Cliente,Cliente 2 Gimnasio Pro,cliente2-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Cliente,Cliente 3 Gimnasio Pro,cliente3-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Cliente,Cliente 4 Gimnasio Pro,cliente4-gimnasio-pro@test.local,password123
+Gimnasio Pro,pro,http://localhost:5173/gimnasio-pro,Cliente,Cliente 5 Gimnasio Pro,cliente5-gimnasio-pro@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Owner,Coach 1 Gimnasio Base,coach1-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Trainer,Coach 2 Gimnasio Base,coach2-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Cliente,Cliente 1 Gimnasio Base,cliente1-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Cliente,Cliente 2 Gimnasio Base,cliente2-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Cliente,Cliente 3 Gimnasio Base,cliente3-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Cliente,Cliente 4 Gimnasio Base,cliente4-gimnasio-base@test.local,password123
+Gimnasio Base,base,http://localhost:5173/gimnasio-base,Cliente,Cliente 5 Gimnasio Base,cliente5-gimnasio-base@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Owner,Coach 1 Fit Studio,coach1-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Trainer,Coach 2 Fit Studio,coach2-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Cliente,Cliente 1 Fit Studio,cliente1-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Cliente,Cliente 2 Fit Studio,cliente2-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Cliente,Cliente 3 Fit Studio,cliente3-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Cliente,Cliente 4 Fit Studio,cliente4-fit-studio@test.local,password123
+Fit Studio,premium,http://localhost:5173/fit-studio,Cliente,Cliente 5 Fit Studio,cliente5-fit-studio@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Owner,Coach 1 Power House,coach1-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Trainer,Coach 2 Power House,coach2-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Cliente,Cliente 1 Power House,cliente1-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Cliente,Cliente 2 Power House,cliente2-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Cliente,Cliente 3 Power House,cliente3-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Cliente,Cliente 4 Power House,cliente4-power-house@test.local,password123
+Power House,pro,http://localhost:5173/power-house,Cliente,Cliente 5 Power House,cliente5-power-house@test.local,password123

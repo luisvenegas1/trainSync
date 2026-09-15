@@ -41,6 +41,7 @@ export function dbToUser(u) {
     organizationId: u.organization_id || null,
     disabled: u.disabled || false,
     reminderEnabled: u.reminder_enabled !== false, // default true
+    billingExempt: u.billing_exempt || false, // eximido del bloqueo por vencimiento
 
     plan: {
       type: u.plan_type || "",
@@ -93,6 +94,8 @@ function dbToExercise(e) {
     muscleGroup: e.muscle_group || "",
     type: e.type || "normal",
     equipment: e.equipment || "Ninguno",
+    visibility: e.visibility || "org",       // 'global' = catálogo base; 'org' = propio del tenant
+    organizationId: e.organization_id || null,
   };
 }
 
@@ -625,6 +628,95 @@ export async function setOrgReminderConfig(orgId, { enabled, daysBefore }) {
   if (error) throw error;
 }
 
+// Config de BLOQUEO por mensualidad vencida (opt-in por organización). Disponible en
+// todos los planes: bloquea SOLO la vista de rutina del cliente vencido.
+export async function getOrgPaymentConfig(orgId) {
+  if (!orgId) return { blockEnabled: false, graceDays: 0 };
+  const { data } = await sb
+    .from("organization_settings")
+    .select("payment_block_enabled, payment_grace_days")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  return { blockEnabled: !!data?.payment_block_enabled, graceDays: data?.payment_grace_days ?? 0 };
+}
+
+export async function setOrgPaymentConfig(orgId, { blockEnabled, graceDays }) {
+  const { error } = await sb
+    .from("organization_settings")
+    .upsert({ organization_id: orgId, payment_block_enabled: !!blockEnabled, payment_grace_days: Math.max(0, Math.min(365, Math.round(Number(graceDays) || 0))) }, { onConflict: "organization_id" });
+  if (error) throw error;
+}
+
+// Exención por cliente: el coach le da acceso aunque esté vencido (update puntual,
+// no toca el resto de la ficha por si la columna es reciente).
+export async function setClientBillingExempt(clientId, exempt) {
+  const { error } = await sb.from("users").update({ billing_exempt: !!exempt }).eq("id", clientId);
+  if (error) throw error;
+}
+
+// ── Recordatorios de pago: reenvío manual + historial ─────────────
+// Reenvía AHORA el recordatorio de pago a un cliente (edge function con JWT).
+export async function sendManualReminder(clientId) {
+  const { data, error } = await sb.functions.invoke("send-reminder", { body: { kind: "client", client_id: clientId } });
+  if (error) {
+    let detail = error.message;
+    try { const b = await error.context?.json?.(); if (b?.error) detail = b.detail ? `${b.error}: ${b.detail}` : b.error; } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
+  return data;
+}
+
+// Historial de recordatorios (auto + manual) de la organización, más reciente primero.
+// RLS: solo miembros de la org (o superadmin) pueden leer.
+export async function getReminderLogs(orgId, limit = 50) {
+  if (!orgId) return [];
+  const { data, error } = await sb
+    .from("payment_reminder_logs")
+    .select("id, client_id, due_date, reminder_type, status, sent_at, error_message, created_at")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  const rows = data || [];
+  const ids = [...new Set(rows.map((r) => r.client_id))];
+  const names = {};
+  if (ids.length) {
+    const { data: us } = await sb.from("users").select("id, name").in("id", ids);
+    for (const u of us || []) names[u.id] = u.name;
+  }
+  return rows.map((r) => ({
+    id: r.id, clientId: r.client_id, clientName: names[r.client_id] || "—",
+    dueDate: r.due_date, type: r.reminder_type, status: r.status,
+    sentAt: r.sent_at, error: r.error_message, createdAt: r.created_at,
+  }));
+}
+
+// Aviso de pago del SaaS al entrenador dueño de un tenant (solo superadmin).
+export async function notifyOwnerSaas(orgId, note) {
+  const { data, error } = await sb.functions.invoke("send-reminder", { body: { kind: "saas", organization_id: orgId, note: note || "" } });
+  if (error) {
+    let detail = error.message;
+    try { const b = await error.context?.json?.(); if (b?.error) detail = b.detail ? `${b.error}: ${b.detail}` : b.error; } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
+  return data;
+}
+
+// Avisos de pago del SaaS enviados a una org (superadmin).
+export async function getSaasNotices(orgId, limit = 30) {
+  if (!orgId) return [];
+  const { data, error } = await sb
+    .from("saas_payment_notices")
+    .select("id, sent_to_email, note, status, error_message, created_at")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).map((r) => ({ id: r.id, email: r.sent_to_email, note: r.note, status: r.status, error: r.error_message, createdAt: r.created_at }));
+}
+
 // ── Administradores / co-entrenadores de la organización ──────────
 // Lista los miembros con rol owner/trainer (los "admins") con su nombre de perfil.
 export async function getOrgAdmins(orgId) {
@@ -709,6 +801,15 @@ export async function getChallengeLeaderboard(challengeId) {
   return (data || []).map((r) => ({ clientId: r.client_id, name: r.name || "Cliente", count: Number(r.count) || 0 }));
 }
 
+// Transfiere un cliente de una organización a otra (con su historial). Llama al RPC
+// SECURITY DEFINER transfer_client, que SOLO deja pasar a un superadmin (valida
+// is_superadmin por dentro). Mueve mediciones/entrenos/pagos, desvincula rutinas.
+export async function transferClient(clientId, targetOrgId) {
+  const { data, error } = await sb.rpc("transfer_client", { p_client_id: clientId, p_target_org: targetOrgId });
+  if (error) throw error;
+  return data;
+}
+
 // ── Gamificación (medallas) por organización ─────────────────────
 export async function getOrgGamification(orgId) {
   if (!orgId) return {};
@@ -731,10 +832,14 @@ export async function setOrgGamification(orgId, config) {
       gold: Math.min(200, Math.max(1, Math.round(Number(config?.goalPct?.gold) || 100))),
     },
   };
-  const { error } = await sb
+  const { data, error } = await sb
     .from("organization_settings")
-    .upsert({ organization_id: orgId, gamification: clean }, { onConflict: "organization_id" });
+    .upsert({ organization_id: orgId, gamification: clean }, { onConflict: "organization_id" })
+    .select("gamification");
   if (error) throw error;
+  // Si RLS deja el upsert en no-op silencioso (sin permiso de escritura), no vuelve
+  // ninguna fila: lo tratamos como error para no mostrar un falso "guardado".
+  if (!data || data.length === 0) throw new Error("No se pudo guardar (sin permiso de escritura en la organización).");
   return clean;
 }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 // Hook para manejar estado de guardado (loading + doble click prevention)
 export function useSaving(){
@@ -32,7 +32,18 @@ export function verifyPassword(plain, hash){
 export function genId(){return"id_"+Math.random().toString(36).slice(2,10)}
 export function useLS(key,init){
   const[val,setVal]=useState(()=>{try{const s=localStorage.getItem(key);return s?JSON.parse(s):init}catch{return init}});
-  const set=useCallback(v=>{setVal(v);localStorage.setItem(key,JSON.stringify(v))},[key]);
+  const set=useCallback(v=>{
+    setVal(v);
+    try{localStorage.setItem(key,JSON.stringify(v))}catch{/* ignore */}
+    // Notificar a OTRAS instancias de useLS con la misma clave (misma pestaña), para
+    // que se sincronicen en vivo (ej. "Reabrir tour" en Guía afecta al tour montado).
+    try{window.dispatchEvent(new CustomEvent("ls:"+key,{detail:v}))}catch{/* ignore */}
+  },[key]);
+  useEffect(()=>{
+    const h=(e)=>setVal(e.detail);
+    window.addEventListener("ls:"+key,h);
+    return()=>window.removeEventListener("ls:"+key,h);
+  },[key]);
   return[val,set];
 }
 export function getEmbed(url){

@@ -1,16 +1,19 @@
+import { useState } from "react";
 import { useLS } from "../trainsync.utils";
 
 // Tour de bienvenida para el entrenador: checklist de primeros pasos, no invasivo,
 // se puede cerrar y reabrir desde la Guía. Marca pasos hechos según datos reales.
-export function OnboardingTour({ onGo, clientsCount = 0, routinesCount = 0 }) {
+export function OnboardingTour({ onGo, clientsCount = 0, routinesCount = 0, hasAssigned = false, hasMeasurements = false }) {
   const [dismissed, setDismissed] = useLS("ts_tour_dismissed", false);
   const [forced, setForced] = useLS("ts_tour_forced", false);
-  // El onboarding se considera completo cuando el entrenador ya tiene al menos un
-  // cliente y una rutina. En ese caso NO se muestra solo (un trainer ya establecido,
-  // como Johel, no lo ve). Solo aparece la primera vez (sin datos) o si se reabre
-  // explícitamente desde la Guía (forced).
-  const onboardingComplete = clientsCount > 0 && routinesCount > 0;
-  const show = forced || (!dismissed && !onboardingComplete);
+  // Decisión CONGELADA al inicio de la sesión: como este componente se monta cuando
+  // los datos YA cargaron (MainApp corre tras data.loading=false), sabemos si el
+  // entrenador arrancó la sesión con el onboarding completo. Si ya estaba completo
+  // (trainer establecido, como Johel), no se muestra solo. Si arrancó incompleto, el
+  // tour se queda TODA la sesión aunque complete pasos en el camino; solo se va si lo
+  // cierra explícitamente (dismissed) — evita que desaparezca al crear una rutina.
+  const [startedComplete] = useState(() => clientsCount > 0 && routinesCount > 0);
+  const show = forced || (!dismissed && !startedComplete);
   if (!show) return null;
 
   function close() { setDismissed(true); setForced(false); }
@@ -18,14 +21,14 @@ export function OnboardingTour({ onGo, clientsCount = 0, routinesCount = 0 }) {
   const steps = [
     { n: 1, label: "Agregá tu primer cliente", done: clientsCount > 0, go: "clients" },
     { n: 2, label: "Creá una rutina", done: routinesCount > 0, go: "routines" },
-    { n: 3, label: "Asigná la rutina a un cliente", done: false, go: "routines" },
-    { n: 4, label: "Registrá mediciones", done: false, go: "clients" },
-    { n: 5, label: "Revisá el progreso", done: false, go: "clients" },
+    { n: 3, label: "Asigná la rutina a un cliente", done: hasAssigned, go: "routines" },
+    { n: 4, label: "Registrá mediciones", done: hasMeasurements, go: "clients" },
+    { n: 5, label: "Revisá el progreso", done: hasMeasurements, go: "clients" },
   ];
   const doneCount = steps.filter((s) => s.done).length;
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #DDE4F0", borderRadius: 14, padding: 16, marginBottom: 14 }}>
+    <div data-cy="onboarding-tour" style={{ background: "#fff", border: "1px solid #DDE4F0", borderRadius: 14, padding: 16, marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <div>
           <div style={{ fontWeight: 900, color: "#0B1F4B", fontSize: 16 }}>👋 Bienvenido a TrainSync</div>

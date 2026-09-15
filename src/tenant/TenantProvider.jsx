@@ -93,7 +93,15 @@ function MultiTenant({ children }) {
     );
   }
 
-  const value = { mode: "tenant", slug: state.slug, org: state.org, branding: state.branding, featureOverrides: state.settings?.feature_overrides || {}, gamification: state.settings?.gamification || {} };
+  const value = {
+    mode: "tenant", slug: state.slug, org: state.org, branding: state.branding,
+    featureOverrides: state.settings?.feature_overrides || {},
+    gamification: state.settings?.gamification || {},
+    // Bloqueo por mensualidad vencida (opt-in por org). El cliente lo lee para gatear su rutina.
+    payment: { blockEnabled: !!state.settings?.payment_block_enabled, graceDays: state.settings?.payment_grace_days ?? 0 },
+    // Recordatorios de pago configurados (para marcar el paso en la Guía).
+    reminders: { enabled: !!state.settings?.reminders_enabled, daysBefore: state.settings?.reminders_days_before ?? 3 },
+  };
   return (
     <TenantContext.Provider value={value}>
       <BrandingContext.Provider value={state.branding}><DocumentBranding branding={state.branding} />{children}</BrandingContext.Provider>

@@ -176,7 +176,13 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
 
   let content;
   if (page === "about") content = <AboutPage />;
-  else if (page === "guide") content = <GuidePage isTrainer={isT} plan={plan} />;
+  else if (page === "guide") content = <GuidePage isTrainer={isT} plan={plan} progress={{
+    hasClients: data.users.some((u) => u.role !== "trainer"),
+    hasRoutines: data.routines.length > 0,
+    hasExercises: data.exercises.some((e) => e.visibility !== "global"),
+    hasAssigned: data.routines.some((r) => (r.assignedUserIds || []).length > 0),
+    hasMeasurements: (data.measurements || []).length > 0,
+  }} />;
   else if (isT) {
     if (page === "dashboard") content = <Dashboard users={data.users} routines={data.routines} />;
     else if (page === "clients") content = <ClientsPage users={data.users} setUsers={data.setUsers} routines={data.routines} measurements={data.measurements} setMeasurements={data.setMeasurements} payments={data.payments} setPayments={data.setPayments} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} selectedClientId={null} />;
@@ -199,7 +205,11 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
           <main className="main">
             {adminControls && <AdminViewBar {...adminControls} currentUser={currentUser} />}
             {readOnly && (demoControls ? <DemoTopBar {...demoControls} currentUser={currentUser} /> : <DemoBanner />)}
-            {isT && !readOnly && <OnboardingTour onGo={setPage} clientsCount={data.users.filter((u) => u.role !== "trainer").length} routinesCount={data.routines.length} />}
+            {isT && !readOnly && <OnboardingTour onGo={setPage}
+              clientsCount={data.users.filter((u) => u.role !== "trainer").length}
+              routinesCount={data.routines.length}
+              hasAssigned={data.routines.some((r) => (r.assignedUserIds || []).length > 0)}
+              hasMeasurements={(data.measurements || []).length > 0} />}
             {content}
             <AppFooter />
           </main>

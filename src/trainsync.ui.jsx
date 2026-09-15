@@ -15,8 +15,8 @@ export function Modal({title,onClose,children,size=""}){
   return(<div className="mb" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className={`mo${size?" mo-"+size:""}`}><div className="mo-h"><div className="mo-t">{title}</div><button className="mo-x" onClick={onClose}>✕</button></div>{children}</div></div>);
 }
 
-export function SaveBtn({onClick,saving,children,className="btn btn-p",style={}}){
-  return(<button className={className} style={style} onClick={onClick} disabled={saving}>
+export function SaveBtn({onClick,saving,children,className="btn btn-p",style={},...rest}){
+  return(<button className={className} style={style} onClick={onClick} disabled={saving} {...rest}>
     {saving?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:14,height:14,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>Guardando...</span>:children}
   </button>);
 }
@@ -82,7 +82,7 @@ export function SobreJohel({onClose}){
   );
 }
 
-function InstallModal({onClose}){
+export function InstallModal({onClose}){
   const[os,setOs]=useState(null); // null | "ios" | "android"
   const btnStyle={padding:"12px 0",borderRadius:10,fontWeight:700,fontSize:15,cursor:"pointer",border:"none",width:"100%",marginBottom:8};
   const steps={
@@ -202,7 +202,7 @@ export function Sidebar({user,page,setPage,onLogout,isSuperadmin=false,features=
       <div className="sb-logo"><img src={brand.logoUrl||LOGO_IMG} alt={brand.displayName} style={{width:52,height:52,objectFit:"contain",borderRadius:10}}/><div className="sb-brand">{brand.displayName}</div><div className="sb-sub">{brand.taglineShort}</div></div>
       <nav>
         {isT&&<div className="nav-sec">Menú</div>}
-        {navs.map(n=>(<div key={n.id} className={`nav-item${page===n.id?" active":""}`} onClick={()=>setPage(n.id)}><span className="nav-icon">{n.icon}</span><span>{n.label}</span></div>))}
+        {navs.map(n=>(<div key={n.id} data-cy={`nav-${n.id}`} className={`nav-item${page===n.id?" active":""}`} onClick={()=>setPage(n.id)}><span className="nav-icon">{n.icon}</span><span>{n.label}</span></div>))}
         {/* Acceso al Panel de Plataforma: SOLO para el superusuario (platform_admins).
             El acceso real se re-valida en /platform contra platform_admins. */}
         {isSuperadmin&&(<>

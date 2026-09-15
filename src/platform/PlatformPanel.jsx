@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { loadPlatformData, invokePlatform, existingSlugsOf, paymentsForOrg, auditForOrg } from "./platformApi";
+import { loadPlatformData, invokePlatform, existingSlugsOf, paymentsForOrg, auditForOrg, loadOrgClients } from "./platformApi";
+import { transferClient, notifyOwnerSaas, getSaasNotices } from "../db";
 import { uploadLogo, uploadTrainerPhoto } from "../storage/storage";
 import { FEATURE_CATALOG, planFeatures } from "../plans/entitlements";
 import {
@@ -369,7 +370,7 @@ function OrgDetail({ org, data, busy, onBack, runAction, allSlugs }) {
       </div>
 
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {[["info", "Organización"], ["subscription", "Suscripción"], ["payments", "Pagos"], ["branding", "Branding"], ["features", "Funciones"], ["audit", "Historial"]].map(([id, label]) => (
+        {[["info", "Organización"], ["subscription", "Suscripción"], ["payments", "Pagos"], ["clientes", "Clientes"], ["branding", "Branding"], ["features", "Funciones"], ["audit", "Historial"]].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ border: `1px solid ${C.line}`, background: tab === id ? C.blue : "#fff", color: tab === id ? "#fff" : C.ink, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12 }}>{label}</button>
         ))}
       </div>
@@ -378,6 +379,7 @@ function OrgDetail({ org, data, busy, onBack, runAction, allSlugs }) {
       {tab === "subscription" && <OrgSubscriptionTab org={org} busy={busy} runAction={runAction} />}
       {tab === "payments" && <OrgPaymentsTab org={org} payments={payments} busy={busy} runAction={runAction} />}
       {tab === "branding" && <OrgBrandingTab org={org} busy={busy} runAction={runAction} />}
+      {tab === "clientes" && <OrgClientsTab org={org} orgs={data.organizations} />}
       {tab === "features" && <OrgFeaturesTab org={org} busy={busy} runAction={runAction} />}
       {tab === "audit" && (
         <div style={{ ...card }}>
@@ -387,6 +389,92 @@ function OrgDetail({ org, data, busy, onBack, runAction, allSlugs }) {
               <div style={{ color: C.muted, fontSize: 11 }}>{JSON.stringify(a.metadata)}</div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Clientes de la org + transferencia a otro tenant (acción de soporte del superadmin).
+function OrgClientsTab({ org, orgs }) {
+  const [clients, setClients] = useState(null);
+  const [targets, setTargets] = useState({}); // clientId -> orgId destino
+  const [busyId, setBusyId] = useState(null);
+  const [msg, setMsg] = useState(null); // { text, ok }
+  const [pending, setPending] = useState(null); // { client, target } → confirmación en modal
+  const others = (orgs || []).filter((o) => o.id !== org.id);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      await Promise.resolve();
+      try { const list = await loadOrgClients(org.id); if (alive) setClients(list); }
+      catch (e) { if (alive) { setClients([]); setMsg({ text: "No se pudieron cargar los clientes: " + (e?.message || e), ok: false }); } }
+    })();
+    return () => { alive = false; };
+  }, [org.id]);
+
+  function askMove(c) {
+    const target = others.find((o) => o.id === targets[c.id]);
+    if (!target) { setMsg({ text: "Elegí la organización destino.", ok: false }); return; }
+    setMsg(null); setPending({ client: c, target });
+  }
+
+  async function doMove() {
+    if (!pending) return;
+    const { client: c, target } = pending;
+    setBusyId(c.id); setPending(null);
+    try {
+      await transferClient(c.id, target.id);
+      setClients((cs) => cs.filter((x) => x.id !== c.id));
+      setMsg({ text: `${c.name} movido a ${target.name}. Su historial viajó con él.`, ok: true });
+    } catch (e) {
+      setMsg({ text: "No se pudo mover: " + (e?.message || e), ok: false });
+    } finally { setBusyId(null); }
+  }
+
+  return (
+    <div style={{ ...card }}>
+      <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 14 }}>Clientes de {org.name}</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+        Transferir un cliente a otro tenant se lleva su historial (mediciones, entrenamientos, pagos).
+        Las rutinas quedan con este tenant y se limpia la rutina activa. Acción de soporte, no reversible con un clic.
+      </div>
+      {msg && <div style={{ fontSize: 12, fontWeight: 700, color: msg.ok ? C.ok : C.red, background: msg.ok ? "#E8F5E9" : "#FDECEA", border: `1px solid ${msg.ok ? "#C8E6C9" : "#F5C6CB"}`, borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>{msg.text}</div>}
+      {clients === null ? <div style={{ color: C.muted, fontSize: 13 }}>Cargando…</div>
+        : clients.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>Esta organización no tiene clientes.</div>
+        : clients.map((c) => (
+          <div key={c.id} data-cy="client-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: `1px solid ${C.line}`, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: C.ink }}>{c.name}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>{c.email || "sin correo"}</div>
+            </div>
+            <select value={targets[c.id] || ""} disabled={others.length === 0 || busyId === c.id}
+              onChange={(e) => setTargets((t) => ({ ...t, [c.id]: e.target.value }))}
+              style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.line}`, fontSize: 12, background: "#fff", color: C.ink }}>
+              <option value="">Mover a…</option>
+              {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <button className="btn btn-g" disabled={busyId === c.id || !targets[c.id]} style={{ padding: "5px 10px", fontSize: 12, color: C.red }} onClick={() => askMove(c)}>
+              {busyId === c.id ? "Moviendo…" : "Mover"}
+            </button>
+          </div>
+        ))}
+
+      {pending && (
+        <div onClick={() => setPending(null)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 22, maxWidth: 420, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize: 30, textAlign: "center", marginBottom: 8 }}>↔️</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: C.ink, textAlign: "center", marginBottom: 8 }}>¿Mover a {pending.client.name}?</div>
+            <div style={{ fontSize: 13, color: C.muted, textAlign: "center", lineHeight: 1.6, marginBottom: 18 }}>
+              Pasa de <strong style={{ color: C.ink }}>{org.name}</strong> a <strong style={{ color: C.ink }}>{pending.target.name}</strong>.
+              Se lleva su historial (mediciones, entrenamientos, pagos). Sus <strong>rutinas NO se mueven</strong>.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <button className="btn btn-g" onClick={() => setPending(null)}>Cancelar</button>
+              <button className="btn btn-p" style={{ background: C.red, borderColor: C.red }} onClick={doMove}>Sí, mover</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -452,7 +540,7 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
         </select>
       </Field>
       <Field label="Plan">
-        <select className="inp" value={plan} onChange={(e) => setPlan(e.target.value)}>
+        <select className="inp" data-cy="sub-plan" value={plan} onChange={(e) => setPlan(e.target.value)}>
           {[...new Set([plan, ...PLATFORM_PLANS])].filter(Boolean).map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
       </Field>
@@ -460,11 +548,55 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
       <Field label="Gracia hasta (opcional)"><input className="inp" type="date" value={grace} onChange={(e) => setGrace(e.target.value)} /></Field>
       <Field label="Notas administrativas internas"><textarea className="inp" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn btn-p" disabled={busy} onClick={save}>Guardar</button>
+        <button className="btn btn-p" data-cy="sub-save" disabled={busy} onClick={save}>Guardar</button>
         {org.subStatus === "suspended"
           ? <button className="btn btn-g" disabled={busy} onClick={() => runAction("reactivate", { organization_id: org.id }, "Reactivada.")}>Reactivar</button>
           : !isDemo && <button className="btn btn-g" style={{ color: C.red }} disabled={busy} onClick={() => { if (confirm("¿Suspender por falta de pago? Conserva los datos.")) runAction("suspend", { organization_id: org.id }, "Suspendida."); }}>Suspender</button>}
       </div>
+      <SaasNotice org={org} />
+    </div>
+  );
+}
+
+// Aviso de pago del SaaS al entrenador (dueño del tenant) + registro de envíos.
+function SaasNotice({ org }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [rows, setRows] = useState([]);
+  const load = useCallback(() => {
+    getSaasNotices(org.id).then(setRows).catch(() => setRows([]));
+  }, [org.id]);
+  useEffect(() => { load(); }, [load]);
+
+  async function send() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await notifyOwnerSaas(org.id, note);
+      setMsg({ ok: true, t: "Aviso enviado a " + (r?.to || "el entrenador") });
+      setNote(""); load();
+    } catch (e) { setMsg({ ok: false, t: "No se pudo enviar: " + (e?.message || e) }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{ marginTop: 18, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
+      <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>📧 Aviso de pago del SaaS al entrenador</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Le envía un correo al dueño del tenant recordándole su pago del plan. Podés agregar una nota (monto, fecha, medio).</div>
+      {msg && <div style={{ fontSize: 12, color: msg.ok ? "#2E7D32" : C.red, marginBottom: 8 }}>{msg.ok ? "✓ " : "⚠ "}{msg.t}</div>}
+      <textarea className="inp" data-cy="saas-note" rows={2} placeholder="Nota opcional para el entrenador…" value={note} onChange={(e) => setNote(e.target.value)} />
+      <button className="btn btn-p" data-cy="saas-send" style={{ marginTop: 8 }} disabled={busy} onClick={send}>{busy ? "Enviando…" : "Enviar aviso"}</button>
+      {rows.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Avisos enviados</div>
+          {rows.map((r) => (
+            <div key={r.id} style={{ fontSize: 12, color: C.ink, padding: "6px 0", borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span>{r.email}{r.note ? ` · ${r.note}` : ""}</span>
+              <span style={{ color: r.status === "sent" ? "#2E7D32" : C.red, whiteSpace: "nowrap" }}>{r.status === "sent" ? "Enviado" : "Falló"} · {new Date(r.createdAt).toLocaleDateString("es-CR", { day: "2-digit", month: "short" })}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -584,14 +716,14 @@ function OrgFeaturesTab({ org, busy, runAction }) {
             <div style={{ fontSize: 11, color: C.muted }}>{feat.desc}</div>
             <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Por plan: {planDefaults[feat.key] ? "incluida ✓" : "no incluida"}</div>
           </div>
-          <select className="inp" style={{ width: 150, minHeight: 34 }} value={sel[feat.key]} onChange={(e) => setSel((p) => ({ ...p, [feat.key]: e.target.value }))}>
+          <select data-cy={`feat-${feat.key}`} className="inp" style={{ width: 150, minHeight: 34 }} value={sel[feat.key]} onChange={(e) => setSel((p) => ({ ...p, [feat.key]: e.target.value }))}>
             <option value="">Según el plan</option>
             <option value="on">Activada</option>
             <option value="off">Desactivada</option>
           </select>
         </div>
       ))}
-      <button className="btn btn-p" style={{ marginTop: 12 }} disabled={busy} onClick={save}>Guardar funciones</button>
+      <button className="btn btn-p" data-cy="feat-save" style={{ marginTop: 12 }} disabled={busy} onClick={save}>Guardar funciones</button>
       {note && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{note}</div>}
     </div>
   );
@@ -743,12 +875,12 @@ function NewOrgModal({ existingSlugs, busy, onClose, onCreate }) {
           <div style={{ fontSize: 18, fontWeight: 900 }}>➕ Nueva organización</div>
           <button className="btn btn-g" style={{ padding: "4px 10px" }} onClick={onClose}>✕</button>
         </div>
-        <Field label="Nombre de la organización (interno)"><input className="inp" value={f.name} onChange={set("name")} placeholder="Juan Fitness" />{errors.name && <div className="err">⚠ {errors.name}</div>}</Field>
+        <Field label="Nombre de la organización (interno)"><input className="inp" data-cy="org-name" value={f.name} onChange={set("name")} placeholder="Juan Fitness" />{errors.name && <div className="err">⚠ {errors.name}</div>}</Field>
         <Field label="Nombre comercial (visible)"><input className="inp" value={f.displayName} onChange={set("displayName")} placeholder="Juan Fitness Studio" /></Field>
-        <Field label="Slug (sugerido, editable, único)"><input className="inp" value={f.slug} onChange={(e) => setF((p) => ({ ...p, slug: slugifyLive(e.target.value) }))} placeholder="juan-fitness" autoCapitalize="none" autoCorrect="off" spellCheck={false} /><div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>URL: {(f.slug || "tu-slug")}.tito-apps.com</div>{errors.slug && <div className="err">⚠ {errors.slug}</div>}</Field>
+        <Field label="Slug (sugerido, editable, único)"><input className="inp" data-cy="org-slug" value={f.slug} onChange={(e) => setF((p) => ({ ...p, slug: slugifyLive(e.target.value) }))} placeholder="juan-fitness" autoCapitalize="none" autoCorrect="off" spellCheck={false} /><div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>URL: {(f.slug || "tu-slug")}.tito-apps.com</div>{errors.slug && <div className="err">⚠ {errors.slug}</div>}</Field>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Field label="Nombre del owner"><input className="inp" value={f.ownerName} onChange={set("ownerName")} />{errors.ownerName && <div className="err">⚠ {errors.ownerName}</div>}</Field>
-          <Field label="Correo del owner"><input className="inp" type="email" value={f.ownerEmail} onChange={set("ownerEmail")} placeholder="juan@correo.com" />{errors.ownerEmail && <div className="err">⚠ {errors.ownerEmail}</div>}</Field>
+          <Field label="Nombre del owner"><input className="inp" data-cy="org-owner-name" value={f.ownerName} onChange={set("ownerName")} />{errors.ownerName && <div className="err">⚠ {errors.ownerName}</div>}</Field>
+          <Field label="Correo del owner"><input className="inp" data-cy="org-owner-email" type="email" value={f.ownerEmail} onChange={set("ownerEmail")} placeholder="juan@correo.com" />{errors.ownerEmail && <div className="err">⚠ {errors.ownerEmail}</div>}</Field>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Field label="Plan inicial">
@@ -771,7 +903,7 @@ function NewOrgModal({ existingSlugs, busy, onClose, onCreate }) {
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button className="btn btn-g" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-p" disabled={busy} onClick={submit}>{busy ? "Creando…" : "Crear organización"}</button>
+          <button className="btn btn-p" data-cy="org-create" disabled={busy} onClick={submit}>{busy ? "Creando…" : "Crear organización"}</button>
         </div>
       </div>
     </div>

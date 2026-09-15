@@ -21,8 +21,10 @@ export async function signIn(email, password) {
 }
 
 export async function signOut() {
-  const { error } = await sb.auth.signOut();
-  if (error) throw error;
+  // scope "local": limpia SIEMPRE la sesión guardada en el navegador, aunque el token
+  // ya no sea válido en el servidor (token viejo/expirado, o Supabase reiniciado en
+  // local). Evita el loop de "Sesión inválida" al refrescar. Best-effort: no lanza.
+  try { await sb.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
 }
 
 // Carga membresías (org + rol) del usuario autenticado. Con RLS activo, solo

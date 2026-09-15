@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useBranding } from "../branding/BrandingContext";
 import { sendPasswordReset, updateOwnPassword } from "./authClient";
 import { PasswordField } from "./PasswordField";
+import { AppFooter, InstallModal } from "../trainsync.ui";
 
 // Spinner de carga de sesión.
 export function AuthLoading({ label = "Verificando sesión…" }) {
@@ -64,6 +65,7 @@ export function SupabaseLogin({ onSubmit, formError }) {
   const [resetMsg, setResetMsg] = useState(null);
   const [resetErr, setResetErr] = useState(null);
   const [showSobre, setShowSobre] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
   const hasTrainerInfo = !!(brand.bio || brand.trainerPhotoUrl || brand.contactEmail || brand.whatsapp || brand.instagram);
 
   async function submit(e) {
@@ -100,6 +102,7 @@ export function SupabaseLogin({ onSubmit, formError }) {
   return (
     <div className="login-page">
       {showSobre && <SobreTrainer brand={brand} onClose={() => setShowSobre(false)} />}
+      {showInstall && <InstallModal onClose={() => setShowInstall(false)} />}
       <div className="login-box">
         <div className="login-logo">
           {brand.logoUrl && <img src={brand.logoUrl} alt={brand.displayName} style={{ width: 120, height: 120, objectFit: "contain", display: "block", margin: "0 auto 10px" }} />}
@@ -114,13 +117,16 @@ export function SupabaseLogin({ onSubmit, formError }) {
             <button className="btn btn-p btn-full" type="submit" style={{ marginTop: 8 }} disabled={busy}>{busy ? "Ingresando…" : "Ingresar →"}</button>
           </form>
           <button type="button" onClick={() => { setForgot(true); setResetMsg(null); setResetErr(null); }} style={{ background: "none", border: "none", color: "#1A5DC8", fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 12, display: "block", width: "100%", textAlign: "center" }}>¿Olvidaste tu contraseña?</button>
-          {hasTrainerInfo && (
-            <div style={{ textAlign: "center", marginTop: 14, paddingTop: 14, borderTop: "1px solid #DDE4F0" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 20, flexWrap: "wrap", marginTop: 14, paddingTop: 14, borderTop: "1px solid #DDE4F0" }}>
+            <button type="button" onClick={() => setShowInstall(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#3A8EF6", fontSize: 13, fontWeight: 700, padding: 0 }}>
+              📲 Instalar como app
+            </button>
+            {hasTrainerInfo && (
               <button type="button" onClick={() => setShowSobre(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#1A5DC8", fontSize: 13, fontWeight: 700, textDecoration: "underline", padding: 0 }}>
                 Sobre {brand.displayName || "el entrenador"} →
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </>)}
         {forgot && (<>
           <div style={{ fontSize: 13, color: "#6B7A99", marginBottom: 10 }}>Escribí tu correo y te enviamos un enlace para crear una nueva contraseña.</div>
@@ -136,6 +142,7 @@ export function SupabaseLogin({ onSubmit, formError }) {
           Al ingresar aceptás los <a href="/terminos" style={{ color: "inherit", textDecoration: "underline" }}>Términos</a> y la <a href="/privacidad" style={{ color: "inherit", textDecoration: "underline" }}>Privacidad</a>.
         </div>
       </div>
+      <AppFooter />
     </div>
   );
 }
@@ -186,6 +193,7 @@ export function SetNewPasswordScreen({ onDone }) {
           </form>
         )}
       </div>
+      <AppFooter />
     </div>
   );
 }
