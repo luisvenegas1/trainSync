@@ -555,31 +555,40 @@ export function MeasurementsTab({client,measurements,setMeasurements}){
 // ── HISTORY WITH CHART SELECTOR ──
 export function MultiChart({clientMs}){
   const[chartField,setChartField]=useState("weight");
+  const[chartType,setChartType]=useLS("ts_progress_chart","line"); // misma preferencia que en Entrenos
   const data=clientMs.filter(m=>m[chartField]&&Number(m[chartField])>0).slice(-10);
   const max=data.length?Math.max(...data.map(m=>Number(m[chartField]))):1;
   const min=data.length?Math.min(...data.map(m=>Number(m[chartField]))):0;
   const range=max-min||1;
   const fld=MEASUREMENT_FIELDS.find(f=>f.key===chartField);
+  const color=CHART_COLORS[MEASUREMENT_FIELDS.findIndex(f=>f.key===chartField)%CHART_COLORS.length];
   return(<div className="card" style={{marginBottom:12}}>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
       <div style={{fontSize:11,fontWeight:700,color:"#6B7A99",textTransform:"uppercase",letterSpacing:1}}>Gráfico:</div>
       <select className="sel" style={{width:"auto",minWidth:150,flex:1}} value={chartField} onChange={e=>setChartField(e.target.value)}>
         {MEASUREMENT_FIELDS.map(f=><option key={f.key} value={f.key}>{f.label}{f.unit?` (${f.unit})`:""}</option>)}
       </select>
-    </div>
-    {data.length>1?(<div className="chart-wrap">
-      <div className="chart-inner">
-        {data.map((m,i)=>{
-          const h=Math.max(6,((Number(m[chartField])-min)/range)*80+12);
-          const color=CHART_COLORS[MEASUREMENT_FIELDS.findIndex(f=>f.key===chartField)%CHART_COLORS.length];
-          return(<div key={i} className="chart-col">
-            <div className="chart-val">{m[chartField]}</div>
-            <div className="chart-bar-f" style={{height:h,background:color}}/>
-            <div className="chart-lbl">{m.date?.slice(5)}</div>
-          </div>);
-        })}
+      <div style={{display:"flex",gap:4}}>
+        <button type="button" className={`btn btn-sm ${chartType==="line"?"btn-p":"btn-s"}`} onClick={()=>setChartType("line")}>Líneas</button>
+        <button type="button" className={`btn btn-sm ${chartType==="bar"?"btn-p":"btn-s"}`} onClick={()=>setChartType("bar")}>Barras</button>
       </div>
-    </div>):<div style={{textAlign:"center",padding:12,color:"#6B7A99",fontSize:12}}>Necesitas al menos 2 mediciones de {fld?.label} para ver la gráfica</div>}
+    </div>
+    {data.length>1?(
+      chartType==="bar"?(<div className="chart-wrap">
+        <div className="chart-inner">
+          {data.map((m,i)=>{
+            const h=Math.max(6,((Number(m[chartField])-min)/range)*80+12);
+            return(<div key={i} className="chart-col">
+              <div className="chart-val">{m[chartField]}</div>
+              <div className="chart-bar-f" style={{height:h,background:color}}/>
+              <div className="chart-lbl">{m.date?.slice(5)}</div>
+            </div>);
+          })}
+        </div>
+      </div>):(
+        <WeightLineChart data={data.map(m=>({w:Number(m[chartField]),date:m.date}))} min={min} range={range} color={color}/>
+      )
+    ):<div style={{textAlign:"center",padding:12,color:"#6B7A99",fontSize:12}}>Necesitas al menos 2 mediciones de {fld?.label} para ver la gráfica</div>}
   </div>);
 }
 
@@ -1668,15 +1677,36 @@ export function WorkoutFrequencyChart({sessions}){
         </div>);
       })}
     </div></div>):<div style={{textAlign:"center",padding:12,color:"#6B7A99",fontSize:12}}>Aún no hay entrenamientos</div>}
-    <div style={{fontSize:10,color:"#6B7A99",textAlign:"center",marginTop:6}}>En rojo la {mode==="week"?"semana":"mes"} actual · comparalo con {mode==="week"?"semanas":"meses"} anteriores</div>
+    <div style={{fontSize:10,color:"#6B7A99",textAlign:"center",marginTop:6}}>En rojo {mode==="week"?"la semana":"el mes"} actual · comparalo con {mode==="week"?"semanas":"meses"} anteriores</div>
   </div>);
 }
 
 // ── WORKOUT: evolución de peso por ejercicio ──
+// Gráfico de líneas (SVG puro, sin dependencias) para la evolución del peso: más
+// limpio que las barras para ver tendencia. Puntos con su valor + fecha (estilo Wyze).
+function WeightLineChart({data,min,range,color="#2E7D32",labelSlice=6}){
+  const W=340,H=132,padX=24,padTop=24,padBot=26;
+  const n=data.length;
+  const x=(i)=> n<=1?W/2 : padX+(i*(W-2*padX)/(n-1));
+  const y=(w)=> padTop+(1-((w-min)/range))*(H-padTop-padBot);
+  const line=data.map((p,i)=>`${x(i).toFixed(1)},${y(p.w).toFixed(1)}`).join(" ");
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{display:"block"}} preserveAspectRatio="xMidYMid meet">
+      <polyline points={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+      {data.map((p,i)=>(<g key={i}>
+        <circle cx={x(i)} cy={y(p.w)} r="3.5" fill={color}/>
+        <text x={x(i)} y={y(p.w)-8} textAnchor="middle" fontSize="10" fontWeight="700" fill={color}>{p.w}</text>
+        <text x={x(i)} y={H-8} textAnchor="middle" fontSize="9" fill="#6B7A99">{fmtDate(p.date).slice(0,labelSlice)}</text>
+      </g>))}
+    </svg>
+  );
+}
+
 export function ExerciseProgressChart({sessions}){
   const asc=[...sessions].sort((a,b)=>new Date(a.startedAt)-new Date(b.startedAt));
   const names=[...new Set(asc.flatMap(s=>s.logs.map(l=>l.name)).filter(Boolean))].sort();
   const[ex,setEx]=useState("");
+  const[chartType,setChartType]=useLS("ts_progress_chart","line"); // preferencia del coach
   if(!names.length)return null;
   const chosen=names.includes(ex)?ex:names[0];
   const points=[];
@@ -1695,18 +1725,26 @@ export function ExerciseProgressChart({sessions}){
       <select className="sel" style={{width:"auto",minWidth:150,flex:1}} value={chosen} onChange={e=>setEx(e.target.value)}>
         {names.map(n=><option key={n} value={n}>{n}</option>)}
       </select>
+      <div style={{display:"flex",gap:4}}>
+        <button type="button" className={`btn btn-sm ${chartType==="line"?"btn-p":"btn-s"}`} onClick={()=>setChartType("line")}>Líneas</button>
+        <button type="button" className={`btn btn-sm ${chartType==="bar"?"btn-p":"btn-s"}`} onClick={()=>setChartType("bar")}>Barras</button>
+      </div>
     </div>
     {data.length>1?(<>
-      <div className="chart-wrap"><div className="chart-inner">
-        {data.map((p,i)=>{
-          const h=Math.max(6,((p.w-min)/range)*80+12);
-          return(<div key={i} className="chart-col">
-            <div className="chart-val" style={{color:"#2E7D32"}}>{p.w}</div>
-            <div className="chart-bar-f" style={{height:h,background:"#2E7D32"}}/>
-            <div className="chart-lbl">{fmtDate(p.date).slice(0,6)}</div>
-          </div>);
-        })}
-      </div></div>
+      {chartType==="bar"?(
+        <div className="chart-wrap"><div className="chart-inner">
+          {data.map((p,i)=>{
+            const h=Math.max(6,((p.w-min)/range)*80+12);
+            return(<div key={i} className="chart-col">
+              <div className="chart-val" style={{color:"#2E7D32"}}>{p.w}</div>
+              <div className="chart-bar-f" style={{height:h,background:"#2E7D32"}}/>
+              <div className="chart-lbl">{fmtDate(p.date).slice(0,6)}</div>
+            </div>);
+          })}
+        </div></div>
+      ):(
+        <WeightLineChart data={data} min={min} range={range}/>
+      )}
       <div style={{marginTop:8,fontSize:12,textAlign:"center",fontWeight:700,color:delta>0?"#2E7D32":delta<0?"#E53935":"#6B7A99"}}>
         {delta>0?`▲ +${delta} ${data[0].unit} desde el inicio`:delta<0?`▼ ${delta} ${data[0].unit} desde el inicio`:"Sin cambio aún"}
       </div>
