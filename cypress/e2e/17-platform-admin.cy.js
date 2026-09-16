@@ -32,4 +32,13 @@ describe("Plataforma — administración de orgs", () => {
     cy.get('[data-cy="sub-save"]').click();
     cy.contains("Suscripción actualizada", { timeout: 15000 }).should("be.visible");
   });
+
+  it("TC-45c Activar el recordatorio automático del pago del SaaS", () => {
+    openOrg("Gimnasio Pro");
+    cy.contains("button", "Suscripción").click();
+    cy.get('[data-cy="saas-auto-enabled"]', { timeout: 15000 }).check();
+    cy.get('[data-cy="saas-auto-days"]').clear().type("5");
+    cy.get('[data-cy="sub-save"]').click();
+    cy.contains("Suscripción actualizada", { timeout: 15000 }).should("be.visible");
+  });
 });

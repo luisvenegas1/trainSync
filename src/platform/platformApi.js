@@ -98,6 +98,8 @@ export async function loadPlatformData() {
       currentPeriodEnd: s?.current_period_end || null,
       gracePeriodEndsAt: s?.grace_period_ends_at || null,
       graceDays: s?.grace_days ?? 0,
+      saasReminderEnabled: !!s?.saas_reminder_enabled,
+      saasReminderDays: s?.saas_reminder_days ?? 3,
       startedAt: s?.started_at || null,
       adminNotes: s?.admin_notes || "",
       ownerUserId: ownerId,

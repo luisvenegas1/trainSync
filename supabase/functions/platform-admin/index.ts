@@ -254,6 +254,9 @@ async function setSubscription(admin: SB, actor: string, body: SB) {
     patch.grace_days = gd;
     patch.grace_period_ends_at = body.current_period_end ? addDaysIso(body.current_period_end, gd) : null;
   }
+  // Recordatorio automático del pago del SaaS al entrenador.
+  if (body.saas_reminder_enabled !== undefined) patch.saas_reminder_enabled = !!body.saas_reminder_enabled;
+  if (body.saas_reminder_days !== undefined) patch.saas_reminder_days = Math.max(0, Math.min(60, Math.round(Number(body.saas_reminder_days) || 3)));
 
   const up = await admin.from("organization_subscriptions").upsert(patch, { onConflict: "organization_id" });
   if (up.error) return json({ error: "subscription_update_failed", detail: up.error.message }, 400);

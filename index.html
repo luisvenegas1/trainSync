@@ -34,7 +34,10 @@
     // usuario nunca quede viendo una versión vieja cacheada.
     // No registrar el SW cuando corre Cypress: su auto-recarga interfiere con las
     // pruebas E2E (la página se recarga a mitad de carga). No afecta a usuarios reales.
-    if ('serviceWorker' in navigator && !window.Cypress) {
+    // Tampoco en localhost (dev): un SW cacheado interceptaba la ruta interna de
+    // Cypress (/__/) y tapaba su interfaz. En dev no necesitamos PWA.
+    var __isLocalhost = ['localhost', '127.0.0.1', '0.0.0.0'].indexOf(location.hostname) !== -1;
+    if ('serviceWorker' in navigator && !window.Cypress && !__isLocalhost) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
           .then(reg => {

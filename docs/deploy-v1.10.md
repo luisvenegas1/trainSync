@@ -107,6 +107,33 @@ del vencimiento.
 
 ---
 
+## v1.10.4 — recordatorio automático del pago del SaaS al entrenador
+
+Cambio: además del aviso manual, ahora hay un **cron** que le avisa al entrenador X
+días antes del vencimiento de su suscripción (toggle + días por org). El manual sigue
+disponible para reenviar cuando quieras.
+
+- **BD:** correr `supabase/migrations/20260915140000_saas_reminder_auto.sql`
+  (o `supabase db push`).
+- **Edge Functions:**
+  ```bash
+  supabase functions deploy send-saas-reminders --no-verify-jwt   # nuevo cron
+  supabase functions deploy platform-admin --no-verify-jwt        # guarda la config
+  ```
+- **Frontend:** commit + push.
+- **Cron (GitHub Actions):** agregar un job diario que llame a `send-saas-reminders`
+  igual que el de `send-payment-reminders`, con el header `x-cron-secret`:
+  ```yaml
+  # en .github/workflows/*.yml (mismo patrón que send-payment-reminders)
+  - name: Recordatorios de pago del SaaS
+    run: |
+      curl -sS -X POST "$SUPABASE_URL/functions/v1/send-saas-reminders" \
+        -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+  ```
+  > Para probar sin enviar: agregar `?dry_run=1` a la URL (devuelve el resumen sin mandar correos).
+
+---
+
 ## Smoke test post-deploy (en prod)
 
 Logueado como un coach Premium real:

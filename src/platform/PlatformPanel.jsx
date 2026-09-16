@@ -521,6 +521,8 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
   const [plan, setPlan] = useState(org.plan || "base");
   const [periodEnd, setPeriodEnd] = useState(org.currentPeriodEnd ? org.currentPeriodEnd.slice(0, 10) : "");
   const [graceDays, setGraceDays] = useState(org.graceDays ?? 0);
+  const [saasRemEnabled, setSaasRemEnabled] = useState(!!org.saasReminderEnabled);
+  const [saasRemDays, setSaasRemDays] = useState(org.saasReminderDays ?? 3);
   const [notes, setNotes] = useState(org.adminNotes || "");
   const isDemo = org.tenantType === "demo";
   // Fecha efectiva de gracia = vencimiento + días (solo informativa).
@@ -532,6 +534,8 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
       organization_id: org.id, status, plan,
       current_period_end: periodEnd || null,
       grace_days: Number(graceDays) || 0,
+      saas_reminder_enabled: saasRemEnabled,
+      saas_reminder_days: Number(saasRemDays) || 3,
       admin_notes: notes,
     }, "Suscripción actualizada.");
   }
@@ -554,6 +558,16 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
         <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
           Se aplica <b>después</b> del vencimiento (nunca antes) y se recalcula al registrar un pago.
           {Number(graceDays) > 0 && graceUntil ? <> · Gracia hasta <b>{graceUntil}</b>.</> : null}
+        </div>
+      </Field>
+      <Field label="Recordatorio automático del pago del SaaS">
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input data-cy="saas-auto-enabled" type="checkbox" checked={saasRemEnabled} onChange={(e) => setSaasRemEnabled(e.target.checked)} style={{ width: 16, height: 16 }} />
+          <span style={{ fontSize: 13, color: C.ink }}>Avisarle al entrenador antes del vencimiento</span>
+        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <input data-cy="saas-auto-days" className="inp" type="number" min={0} max={60} value={saasRemDays} onChange={(e) => setSaasRemDays(Number(e.target.value))} disabled={!saasRemEnabled} style={{ maxWidth: 90 }} />
+          <span style={{ fontSize: 12, color: C.muted }}>días antes del vencimiento (una sola vez; podés reenviarlo manual abajo)</span>
         </div>
       </Field>
       <Field label="Notas administrativas internas"><textarea className="inp" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
