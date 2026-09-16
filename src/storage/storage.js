@@ -3,7 +3,7 @@
 // fallback para no hacer desaparecer las existentes.
 import { sb } from "../supabase";
 
-const BUCKET = { LOGO: "org-logos", TRAINER: "trainer-photos", AVATAR: "avatars", ROUTINE: "routine-images" };
+const BUCKET = { LOGO: "org-logos", TRAINER: "trainer-photos", AVATAR: "avatars", ROUTINE: "routine-images", DIET: "diets" };
 
 export function publicUrl(bucket, path) {
   return sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
@@ -42,6 +42,25 @@ export async function signedAvatarUrl(path, expiresSec = 3600) {
   const { data, error } = await sb.storage.from(BUCKET.AVATAR).createSignedUrl(path, expiresSec);
   if (error) throw error;
   return data.signedUrl;
+}
+
+// Dietas: bucket PRIVADO. Ruta <org_id>/<client_id>/dieta_<ts>.pdf. Se lee con URL firmada.
+export async function uploadDiet(orgId, clientId, file) {
+  const safe = (file?.name || "dieta.pdf").replace(/[^\w.-]+/g, "_");
+  const path = `${orgId}/${clientId}/dieta_${Date.now()}_${safe}`;
+  const { error } = await sb.storage.from(BUCKET.DIET).upload(path, file, { upsert: true, contentType: file?.type || "application/pdf" });
+  if (error) throw error;
+  return path; // se guarda en users.diet_file_path
+}
+export async function signedDietUrl(path, expiresSec = 3600) {
+  if (!path) return null;
+  const { data, error } = await sb.storage.from(BUCKET.DIET).createSignedUrl(path, expiresSec);
+  if (error) throw error;
+  return data.signedUrl;
+}
+export async function removeDietFile(path) {
+  if (!path) return;
+  await sb.storage.from(BUCKET.DIET).remove([path]).catch(() => {});
 }
 
 // ── Fallback de foto de perfil ──────────────────────────────────

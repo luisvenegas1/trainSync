@@ -126,6 +126,7 @@ contraseña, crear org): en local necesitan las functions corriendo con sus secr
 - `28-onboarding.cy.js` — TC-69 el tour se queda visible aunque se complete un paso · TC-70 la Guía marca en verde lo cumplido ✅
 - `29-config-persistence.cy.js` — TC-71 medallas · TC-72 recordatorios · TC-73 bloqueo: guardar → navegar → volver → el valor persiste sin recargar ✅
 - `30-validations.cy.js` — TC-74 admin correo inválido · TC-75 reto sin nombre · TC-76 contraseñas no coinciden · TC-77 org owner email inválido ✅ (complementa la tanda 18)
+- `31-diets.cy.js` — TC-78 el coach activa acceso + sube PDF (historial) · TC-79 el cliente ve su dieta · TC-80 el coach deshabilita el acceso · TC-81 el cliente ya no ve la sección ✅ (función Premium; usa `cypress/fixtures/dieta.pdf`)
 
 > Patrón anti-regresión: toda config que se guarda debe releer su estado real al
 > montar (no del `tenant` cargado al login). El RLS `org_settings_write` permite

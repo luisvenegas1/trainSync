@@ -11,6 +11,7 @@ const FEATURE_LABELS = {
   payment_reminders: "Recordatorios de pago automáticos",
   custom_branding: "Marca propia (logo/colores)",
   challenges: "Retos y medallas",
+  diets: "Dietas (PDF)",
 };
 
 const TRAINER_STEPS = [
@@ -23,15 +24,17 @@ const TRAINER_STEPS = [
   { t: "7. Registrar mediciones", k: "measurements", d: "En el cliente → Mediciones, registrá peso, grasa, masa muscular y más. Se guardan con fecha para armar el historial. (Plan Pro o superior)." },
   { t: "8. Configurar recordatorios", k: "reminders", d: "En Ajustes de recordatorios elegí cuántos días antes del vencimiento avisar por email. (Plan Premium)." },
   { t: "9. Retos y medallas", k: "challenges", d: "En Retos activás las medallas automáticas: cada cliente gana bronce/plata/oro según el % de su meta semanal (los días/semana de su rutina) que cumple. Podés crear retos entre clientes y ver los logros de cada uno. Tus clientes ven sus medallas, trofeos y progreso en su perfil, con una animación al ganar. (Plan Premium)." },
-  { t: "10. La mensualidad", k: "mensualidad", d: "Cada cliente tiene un plan con fecha de vencimiento. Los recordatorios te ayudan a que nadie se olvide de pagar." },
-  { t: "11. Qué incluye cada plan", k: "plans", d: "Base: gestión y rutinas. Pro: + mediciones y progreso. Premium: + recordatorios automáticos y retos y medallas. Ver el detalle abajo." },
+  { t: "10. Dietas (PDF)", d: "En la ficha del cliente → pestaña Dieta, subí sus dietas en PDF (quedan en un historial por fases) y activá el acceso para ese cliente. El cliente la ve y descarga desde su sección Dieta. (Plan Premium)." },
+  { t: "11. La mensualidad", k: "mensualidad", d: "Cada cliente tiene un plan con fecha de vencimiento. Los recordatorios te ayudan a que nadie se olvide de pagar." },
+  { t: "12. Qué incluye cada plan", k: "plans", d: "Base: gestión y rutinas. Pro: + mediciones y progreso. Premium: + recordatorios automáticos, retos y medallas, y dietas en PDF. Ver el detalle abajo." },
 ];
 
 const CLIENT_STEPS = [
   { t: "1. Tu rutina", d: "En Rutina ves tu plan del día. Tocá “Iniciar” el día que entrenás para registrarlo." },
-  { t: "2. Tu progreso", d: "En Perfil → Historial y Mediciones ves cómo vas avanzando." },
-  { t: "3. Tus medallas", d: "Si tu entrenador las activó, en Perfil → Medallas ves la medalla de la semana según tu meta, tus trofeos, retos ganados y tu progreso de peso. Al completar tu meta, ¡te aparece una animación!" },
-  { t: "4. Tus datos", d: "En Perfil podés editar tus datos y cambiar tu contraseña." },
+  { t: "2. Tu dieta", d: "Si tu entrenador te la habilitó, en Dieta ves y descargás tu plan nutricional en PDF." },
+  { t: "3. Tu progreso", d: "En Perfil → Historial y Mediciones ves cómo vas avanzando." },
+  { t: "4. Tus medallas", d: "Si tu entrenador las activó, en Perfil → Medallas ves la medalla de la semana según tu meta, tus trofeos, retos ganados y tu progreso de peso. Al completar tu meta, ¡te aparece una animación!" },
+  { t: "5. Tus datos", d: "En Perfil podés editar tus datos y cambiar tu contraseña." },
 ];
 
 export function GuidePage({ isTrainer = true, plan = "premium", progress = {} }) {

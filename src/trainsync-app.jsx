@@ -15,7 +15,7 @@ import { STYLES } from "./trainsync.styles";
 import { LoginPage, Sidebar, AppFooter } from "./trainsync.ui";
 import {
   AdminsPage, ClientsPage, Dashboard, ExercisesPage,
-  MyProfilePage, MyRoutinePage, RoutinesPage,
+  MyProfilePage, MyRoutinePage, MyDietPage, RoutinesPage,
 } from "./trainsync.features";
 import { useTenant } from "./tenant/tenantContext";
 import { useSupabaseAuth } from "./auth/useSupabaseAuth";
@@ -193,6 +193,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
     else if (page === "admins") content = <AdminsPage />;
   } else {
     if (page === "my-routine") content = <MyRoutinePage user={liveUser} routines={data.routines} exercises={data.exercises} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} />;
+    else if (page === "my-diet") content = <MyDietPage />;
     else if (page === "my-profile") content = <MyProfilePage user={liveUser} setUsers={data.setUsers} users={data.users} measurements={data.measurements} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} challenges={data.challenges} routines={data.routines} />;
   }
 

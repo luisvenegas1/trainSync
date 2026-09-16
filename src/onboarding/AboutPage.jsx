@@ -11,6 +11,7 @@ export function AboutPage() {
     { icon: "🔔", t: "Recordatorios de pago", d: "Automatizá los avisos de vencimiento por email para que nadie se olvide de pagar la mensualidad." },
     { icon: "🎨", t: "Tu marca", d: "Tu logo, tus colores y tu nombre. Tus clientes ven tu marca, no la nuestra." },
     { icon: "🏅", t: "Retos y medallas", d: "Motivá a tus clientes: medallas automáticas según su meta semanal, retos entre ellos y una animación al ganar. Vos ves los logros de cada uno." },
+    { icon: "🥗", t: "Dietas (PDF)", d: "Subí las dietas de cada cliente en PDF, con historial por fases. Vos decidís a quién le habilitás el acceso; el cliente la ve y descarga desde la app. (Plan Premium)." },
   ];
   return (
     <div>

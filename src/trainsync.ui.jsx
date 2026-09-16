@@ -191,6 +191,7 @@ export function Sidebar({user,page,setPage,onLogout,isSuperadmin=false,features=
     {id:"about",icon:"✨",label:"Acerca de"},
   ]:[
     {id:"my-routine",icon:"📋",label:"Rutina"},
+    ...((features.diets&&user.dietAccess===true)?[{id:"my-diet",icon:"🥗",label:"Dieta"}]:[]),
     {id:"my-profile",icon:"👤",label:"Perfil"},
     {id:"about",icon:"✨",label:"Acerca de"},
   ];

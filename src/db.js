@@ -42,6 +42,7 @@ export function dbToUser(u) {
     disabled: u.disabled || false,
     reminderEnabled: u.reminder_enabled !== false, // default true
     billingExempt: u.billing_exempt || false, // eximido del bloqueo por vencimiento
+    dietAccess: u.diet_access === true, // acceso a la función de dieta (default false: lo activa el coach)
 
     plan: {
       type: u.plan_type || "",
@@ -652,6 +653,47 @@ export async function setOrgPaymentConfig(orgId, { blockEnabled, graceDays }) {
 export async function setClientBillingExempt(clientId, exempt) {
   const { error } = await sb.from("users").update({ billing_exempt: !!exempt }).eq("id", clientId);
   if (error) throw error;
+}
+
+// ── Dietas (PDF) por cliente: historial ──────────────────────────
+// Acceso a la función de dieta por cliente (update puntual).
+export async function setClientDietAccess(clientId, enabled) {
+  const { error } = await sb.from("users").update({ diet_access: !!enabled }).eq("id", clientId);
+  if (error) throw error;
+}
+function dbToDiet(d) {
+  return { id: d.id, clientId: d.client_id, organizationId: d.organization_id, title: d.title || "", filePath: d.file_path, enabled: !!d.enabled, createdAt: d.created_at };
+}
+// Historial de dietas de un cliente (más reciente primero). Staff o el propio cliente.
+export async function getClientDiets(clientId) {
+  if (!clientId) return [];
+  const { data, error } = await sb.from("diets").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(dbToDiet);
+}
+// Alta de una dieta nueva (el archivo ya se subió a Storage → file_path).
+export async function addDiet(orgId, clientId, { title, filePath }) {
+  const { data, error } = await sb.from("diets").insert({ organization_id: orgId, client_id: clientId, title: title || null, file_path: filePath, enabled: true }).select("*").single();
+  if (error) throw error;
+  return dbToDiet(data);
+}
+export async function setDietEnabled(dietId, enabled) {
+  const { error } = await sb.from("diets").update({ enabled: !!enabled }).eq("id", dietId);
+  if (error) throw error;
+}
+export async function updateDietTitle(dietId, title) {
+  const { error } = await sb.from("diets").update({ title: (title || "").slice(0, 80) || null }).eq("id", dietId);
+  if (error) throw error;
+}
+export async function deleteDiet(dietId) {
+  const { error } = await sb.from("diets").delete().eq("id", dietId);
+  if (error) throw error;
+}
+// La dieta ACTIVA del cliente actual (la más reciente habilitada), para su vista.
+export async function getMyActiveDiet() {
+  const { data, error } = await sb.from("diets").select("*").eq("enabled", true).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data ? dbToDiet(data) : null;
 }
 
 // ── Recordatorios de pago: reenvío manual + historial ─────────────

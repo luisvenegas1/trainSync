@@ -134,6 +134,21 @@ disponible para reenviar cuando quieras.
 
 ---
 
+## v1.11.0 — dietas en PDF por cliente (Fase 1)
+
+Cambio: el entrenador sube un PDF de dieta por cliente y lo habilita/oculta; el cliente
+lo ve/descarga desde su sección "Dieta".
+
+- **BD:** correr `supabase/migrations/20260916100000_client_diets.sql` (o `supabase db push`).
+  Crea el bucket privado `diets` + policies y las columnas `diet_*` en `users`.
+- **Edge Functions:** ninguna.
+- **Frontend:** commit + push.
+
+> El bucket `diets` es PRIVADO: escritura del staff de la org; lectura del staff o del
+> propio cliente (URL firmada). Aislamiento por carpeta `<org_id>/<client_id>`.
+
+---
+
 ## Smoke test post-deploy (en prod)
 
 Logueado como un coach Premium real:

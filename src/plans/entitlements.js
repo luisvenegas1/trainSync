@@ -19,6 +19,7 @@ export const PLAN_FEATURES = {
     payment_reminders: false,// recordatorios automáticos por email
     custom_branding: true,   // logo/colores por org
     challenges: false,       // gamificación: retos y medallas
+    diets: false,            // dietas en PDF por cliente
     // futuras: advanced_reports, client_notifications, automations, ...
   },
   pro: {
@@ -28,6 +29,7 @@ export const PLAN_FEATURES = {
     payment_reminders: false,
     custom_branding: true,
     challenges: false,
+    diets: false,
   },
   premium: {
     workouts: true,
@@ -36,6 +38,7 @@ export const PLAN_FEATURES = {
     payment_reminders: true,
     custom_branding: true,
     challenges: true,        // retos y medallas: exclusivo de Premium
+    diets: true,             // dietas en PDF: exclusivo de Premium
   },
 };
 
@@ -46,6 +49,7 @@ export const FEATURE_CATALOG = [
   { key: "analytics", label: "Analítica / Historial", desc: "Gráficas y seguimiento de progreso." },
   { key: "payment_reminders", label: "Recordatorios de pago", desc: "Correos automáticos antes del vencimiento (requiere config del entrenador)." },
   { key: "challenges", label: "Retos y medallas", desc: "Gamificación: medallas por objetivo, retos entre clientes y progreso de peso. Incluido en Premium; podés activarlo aquí para un tenant de otro plan." },
+  { key: "diets", label: "Dietas (PDF)", desc: "El entrenador sube dietas en PDF por cliente (con historial) y las habilita/oculta. Incluido en Premium; podés activarlo aquí para un tenant de otro plan." },
 ];
 
 // Normaliza un plan desconocido a 'base'.
@@ -105,6 +109,7 @@ export function upsellFor(feature) {
     analytics: `Las gráficas de progreso son parte del plan ${label}.`,
     payment_reminders: `Los recordatorios automáticos de pago son parte del plan ${label}.`,
     challenges: `Los retos y medallas son parte del plan ${label}.`,
+    diets: `Las dietas en PDF son parte del plan ${label}.`,
   };
   return msgs[feature] || `Esta función requiere el plan ${label}.`;
 }

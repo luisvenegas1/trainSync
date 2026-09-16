@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   CHART_COLORS,
   MEASUREMENT_FIELDS,
@@ -9,8 +9,8 @@ import { usePermissions } from "./auth/PermissionsContext";
 import { addMonths, calcAge, daysLeft, fmtDate, genId, getPlanStatus, getPlanStatusFromEndDate, initials, planColor, useLS, hashPassword, generatePassword, useSaving, weekKey, weekLabel, monthKey, monthLabel, dayKey, fmtDuration, convertWeight } from "./trainsync.utils";
 import { Modal, PasswordInput, Toast, VideoModal, ExercisePicker, StretchPicker, Logo, SaveBtn } from "./trainsync.ui";
 import { updateOwnPassword, resetClientPassword, inviteClient, inviteTrainer, manageTrainer, deleteClientAccount } from "./auth/authClient";
-import { setClientReminder, getOrgAdmins, removeOrgAdmin, setClientBillingExempt, sendManualReminder } from "./db";
-import { uploadRoutineImage } from "./storage/storage";
+import { setClientReminder, getOrgAdmins, removeOrgAdmin, setClientBillingExempt, sendManualReminder, getClientDiets, addDiet, setDietEnabled, deleteDiet, getMyActiveDiet, setClientDietAccess } from "./db";
+import { uploadRoutineImage, uploadDiet, signedDietUrl, removeDietFile } from "./storage/storage";
 import { MedalsView, MedalCelebration } from "./gamification/GamificationUI";
 import { weeklyCountFor, medalUnlocked, weeklyGoalFor } from "./gamification/medals";
 import { initialWeightFor } from "./workout/lastWeights";
@@ -684,6 +684,126 @@ function EditClientModal({cForm,setCForm,onSave,onClose,saving=false}){
   </Modal>);
 }
 
+// ── DIETA (coach): subir PDFs (historial por fases) + habilitar/ocultar cada uno ──
+function DietTab({client,setClient}){
+  const{readOnly}=usePermissions();
+  const tenant=useTenant();
+  const orgId=tenant?.org?.id||null;
+  const access=client.dietAccess===true;
+  const[title,setTitle]=useState("");
+  const[diets,setDiets]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[busy,setBusy]=useState(false);
+  const[toast,setToast]=useState(null);
+  const fileRef=useRef(null);
+
+  const load=useCallback(async()=>{
+    try{const d=await getClientDiets(client.id);setDiets(d);}catch{setDiets([]);}finally{setLoading(false);}
+  },[client.id]);
+  useEffect(()=>{let a=true;(async()=>{await Promise.resolve();if(a)await load();})();return()=>{a=false;};},[load]);
+
+  async function onFile(file){
+    if(!file||readOnly)return;
+    if(file.type!=="application/pdf"){setToast({msg:"El archivo debe ser un PDF.",type:"err"});return;}
+    if(file.size>10*1024*1024){setToast({msg:"El PDF no debe superar 10 MB.",type:"err"});return;}
+    setBusy(true);
+    try{
+      const path=await uploadDiet(orgId,client.id,file);
+      const t=(title||file.name.replace(/\.pdf$/i,"")).slice(0,80);
+      await addDiet(orgId,client.id,{title:t,filePath:path});
+      setTitle(""); // limpiar el título = confirmación clara de que se guardó
+      await load(); // aparece en el historial de abajo
+      setToast({msg:"Dieta agregada y habilitada. Ya la ve el cliente.",type:"ok"});
+    }catch(e){setToast({msg:"No se pudo subir: "+(e?.message||e),type:"err"});}
+    finally{setBusy(false);if(fileRef.current)fileRef.current.value="";}
+  }
+  async function toggle(d){
+    try{await setDietEnabled(d.id,!d.enabled);await load();setToast({msg:!d.enabled?"Dieta visible para el cliente.":"Dieta oculta.",type:"ok"});}
+    catch(e){setToast({msg:"No se pudo: "+(e?.message||e),type:"err"});}
+  }
+  async function view(d){
+    try{const url=await signedDietUrl(d.filePath);if(url)window.open(url,"_blank","noopener");}
+    catch(e){setToast({msg:"No se pudo abrir: "+(e?.message||e),type:"err"});}
+  }
+  async function remove(d){
+    if(!confirm("¿Quitar esta dieta del historial del cliente?"))return;
+    try{await deleteDiet(d.id);await removeDietFile(d.filePath);await load();setToast({msg:"Dieta eliminada.",type:"ok"});}
+    catch(e){setToast({msg:"No se pudo: "+(e?.message||e),type:"err"});}
+  }
+  async function toggleAccess(next){
+    if(readOnly)return;
+    try{await setClientDietAccess(client.id,next);if(setClient)setClient({...client,dietAccess:next});setToast({msg:next?"Dieta habilitada para este cliente.":"Dieta deshabilitada: el cliente no verá la pestaña (el historial se conserva).",type:"ok"});}
+    catch(e){setToast({msg:"No se pudo: "+(e?.message||e),type:"err"});}
+  }
+
+  return(<div>
+    {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
+    {!readOnly&&<div className="card" style={{marginBottom:12}}>
+      <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+        <input data-cy="diet-access" type="checkbox" checked={access} onChange={e=>toggleAccess(e.target.checked)} style={{width:18,height:18,flexShrink:0}}/>
+        <span><span style={{fontWeight:700,color:"#0B1F4B"}}>Acceso a dietas para este cliente</span><br/><span style={{fontSize:12,color:"#6B7A99"}}>Si lo apagás, el cliente no ve la sección Dieta (ej. dejó de pagar ese servicio). El historial se conserva y lo podés reactivar cuando quieras.</span></span>
+      </label>
+    </div>}
+    {!readOnly&&access&&<div className="card" style={{marginBottom:12}}>
+      <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Agregar dieta (PDF)</div>
+      <div style={{fontSize:12,color:"#6B7A99",marginBottom:12}}>Subí el PDF. Queda en el historial de abajo y el cliente ve la más reciente habilitada desde su sección <strong>Dieta</strong>.</div>
+      <div className="fg"><label>Título (opcional)</label><input data-cy="diet-title" className="inp" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ej: Dieta.pdf"/></div>
+      <label className="btn btn-p" data-cy="diet-upload" style={{cursor:"pointer",display:"inline-block"}}>{busy?"Subiendo…":"📎 Subir PDF de dieta"}<input ref={fileRef} type="file" accept="application/pdf" style={{display:"none"}} onChange={e=>onFile(e.target.files&&e.target.files[0])}/></label>
+    </div>}
+    <div className="card" data-cy="diet-history" style={{padding:0}}>
+      <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:diets.length?"1px solid #EEF1F7":"none"}}>Historial de dietas</div>
+      {loading?<div style={{padding:16,textAlign:"center",color:"#6B7A99",fontSize:13}}>Cargando…</div>
+        :diets.length===0?<div style={{padding:16,textAlign:"center",color:"#6B7A99",fontSize:13}}>Todavía no le subiste ninguna dieta.</div>
+        :diets.map((d,i)=>(<div key={d.id} data-cy="diet-row" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderTop:i?"1px solid #EEF1F7":"none",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:160}}>
+            <div style={{fontWeight:700,color:"#0B1F4B",fontSize:13}}>{d.title||"Dieta"}</div>
+            <div style={{fontSize:11,color:"#9AA7BD"}}>{fmtDate(d.createdAt)}</div>
+          </div>
+          <span className={`badge ${d.enabled?"bd-green":"bd-gray"}`} style={{fontSize:10}}>{d.enabled?"Visible":"Oculta"}</span>
+          <button className="btn btn-p btn-sm" data-cy="diet-view" onClick={()=>view(d)}>📄 Ver</button>
+          {!readOnly&&<button className="btn btn-s btn-sm" onClick={()=>toggle(d)}>{d.enabled?"Ocultar":"Habilitar"}</button>}
+          {!readOnly&&<button className="btn btn-d btn-sm" onClick={()=>remove(d)}>🗑</button>}
+        </div>))}
+    </div>
+  </div>);
+}
+
+// ── DIETA (cliente): ver / descargar la dieta activa que le habilitó el entrenador ──
+export function MyDietPage(){
+  const[diet,setDiet]=useState(undefined); // undefined=cargando, null=sin dieta
+  const[url,setUrl]=useState(null);
+  const[err,setErr]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        const d=await getMyActiveDiet();
+        if(!alive)return;
+        setDiet(d||null);
+        if(d){const u=await signedDietUrl(d.filePath);if(alive)setUrl(u);}
+      }catch{if(alive){setDiet(null);setErr(true);}}
+    })();
+    return()=>{alive=false;};
+  },[]);
+
+  if(diet===undefined)return(<div><div className="ph"><div className="pt">Mi Dieta</div></div><div className="card" style={{textAlign:"center",color:"#6B7A99",padding:16}}>Cargando…</div></div>);
+  if(!diet)return(<div><div className="ph"><div className="pt">Mi Dieta</div></div><div className="card"><div className="empty"><div className="ico">🥗</div><p>Tu entrenador aún no te asignó una dieta.<br/>¡Pronto llegará tu plan nutricional!</p></div></div></div>);
+
+  return(<div>
+    <div className="ph"><div><div className="pt">Mi Dieta</div><div className="ps">{diet.title||"Tu plan nutricional"}</div></div></div>
+    <div className="card">
+      {err?<div style={{textAlign:"center",color:"#E53935",padding:12,fontSize:13}}>No se pudo cargar la dieta. Intentá de nuevo en unos minutos.</div>
+        :<>
+          <a className="btn btn-p" href={url} target="_blank" rel="noreferrer" style={{display:"inline-block",marginBottom:12}}>📄 Ver / Descargar PDF</a>
+          <div style={{border:"1px solid #DDE4F0",borderRadius:10,overflow:"hidden"}}>
+            <iframe title="Dieta" src={url} style={{width:"100%",height:"70vh",border:"none",display:"block"}}/>
+          </div>
+          <div style={{fontSize:11,color:"#9AA7BD",marginTop:8}}>Si el PDF no se muestra acá, tocá <strong>Ver / Descargar PDF</strong> para abrirlo.</div>
+        </>}
+    </div>
+  </div>);
+}
+
 // ── CLIENT DETAIL ──
 export function ClientDetail({client,setClient,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,routines,onBack,onDelete,deleteConfirm,setDeleteConfirm,doDelete}){
   const{readOnly,features}=usePermissions();
@@ -833,7 +953,7 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
       </div>
     </Modal>}
     <div className="tabs">
-      {[["info","👤 Info"],["plan","💳 Plan"],["payments","💰 Pagos"],["workouts","🏋️ Entrenos"],["measurements","📊 Medición"],["history","📈 Historial"]].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
+      {[["info","👤 Info"],["plan","💳 Plan"],["payments","💰 Pagos"],["workouts","🏋️ Entrenos"],["measurements","📊 Medición"],["history","📈 Historial"],...(features?.diets?[["diet","🥗 Dieta"]]:[])].map(([id,lbl])=>(<div key={id} className={`tab${tab===id?" active":""}`} onClick={()=>setTab(id)}>{lbl}</div>))}
     </div>
 
     {tab==="info"&&(<div className="card">
@@ -867,6 +987,7 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
     }:undefined}/>}
     {tab==="measurements"&&<PlanGate feature="measurements"><MeasurementsTab client={client} measurements={measurements} setMeasurements={setMeasurements}/></PlanGate>}
     {tab==="history"&&<PlanGate feature="analytics"><HistoryTab client={client} measurements={measurements} setMeasurements={setMeasurements}/></PlanGate>}
+    {tab==="diet"&&features?.diets&&<DietTab client={client} setClient={setClient}/>}{/* dieta: función Premium + acceso por cliente */}
 
     {showEditInfo&&<EditClientModal cForm={cForm} setCForm={setCForm} onSave={()=>wrap(saveInfo)} saving={saving} onClose={()=>setShowEditInfo(false)}/>}
   </div>);
