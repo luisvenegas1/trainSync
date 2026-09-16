@@ -97,6 +97,7 @@ export async function loadPlatformData() {
       plan: s?.plan || null,
       currentPeriodEnd: s?.current_period_end || null,
       gracePeriodEndsAt: s?.grace_period_ends_at || null,
+      graceDays: s?.grace_days ?? 0,
       startedAt: s?.started_at || null,
       adminNotes: s?.admin_notes || "",
       ownerUserId: ownerId,

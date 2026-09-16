@@ -99,6 +99,14 @@ async function audit(admin: SB, actor: string, action: string, org: string | nul
   } catch (_) { /* la auditoría no debe tumbar la operación */ }
 }
 
+// Fecha (YYYY-MM-DD) + N días → YYYY-MM-DD. Null si la fecha no es válida.
+function addDaysIso(dateStr: string, days: number): string | null {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + (Number(days) || 0));
+  return d.toISOString().slice(0, 10);
+}
+
 function normalizeSlug(input: string): string {
   return String(input || "").toLowerCase().trim()
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -237,9 +245,15 @@ async function setSubscription(admin: SB, actor: string, body: SB) {
   const patch: Record<string, unknown> = { organization_id: orgId, status };
   if (body.plan != null) patch.plan = String(body.plan).trim();
   if (body.current_period_end !== undefined) patch.current_period_end = body.current_period_end;
-  if (body.grace_period_ends_at !== undefined) patch.grace_period_ends_at = body.grace_period_ends_at;
   if (body.started_at !== undefined) patch.started_at = body.started_at;
   if (body.admin_notes !== undefined) patch.admin_notes = body.admin_notes;
+  // Gracia como DÍAS después del vencimiento: se guarda grace_days y se DERIVA la fecha
+  // (nunca antes del vencimiento). Si no hay vencimiento, no hay gracia.
+  if (body.grace_days !== undefined) {
+    const gd = Math.max(0, Math.min(365, Math.round(Number(body.grace_days) || 0)));
+    patch.grace_days = gd;
+    patch.grace_period_ends_at = body.current_period_end ? addDaysIso(body.current_period_end, gd) : null;
+  }
 
   const up = await admin.from("organization_subscriptions").upsert(patch, { onConflict: "organization_id" });
   if (up.error) return json({ error: "subscription_update_failed", detail: up.error.message }, 400);
@@ -275,10 +289,14 @@ async function registerPayment(admin: SB, actor: string, body: SB) {
   // Activar la suscripción si se pidió (y no está cancelada).
   let subUpdated = false;
   if (body.activate_subscription) {
-    const { data: cur } = await admin.from("organization_subscriptions").select("status").eq("organization_id", orgId).maybeSingle();
+    const { data: cur } = await admin.from("organization_subscriptions").select("status, grace_days").eq("organization_id", orgId).maybeSingle();
     if (cur?.status !== "canceled") {
       const patch: Record<string, unknown> = { organization_id: orgId, status: "active" };
-      if (body.period_end) patch.current_period_end = body.period_end;
+      if (body.period_end) {
+        patch.current_period_end = body.period_end;
+        // Recalcular la gracia sobre el NUEVO vencimiento (días de gracia guardados).
+        patch.grace_period_ends_at = addDaysIso(body.period_end, cur?.grace_days || 0);
+      }
       await admin.from("organization_subscriptions").upsert(patch, { onConflict: "organization_id" });
       subUpdated = true;
     }

@@ -95,7 +95,7 @@ contraseña, crear org): en local necesitan las functions corriendo con sus secr
 
 ## Tanda 17 — Plataforma: admin de orgs · `17-platform-admin.cy.js` ✅
 - TC-44 Suspender y reactivar una org
-- TC-45 Cambiar el plan de una org
+- TC-45 Cambiar el plan de una org · TC-45b fijar días de gracia de la suscripción
 - TC-61/62 Overrides de funciones por org (activar + efecto en el coach) → `23-platform-overrides.cy.js` ✅
 
 ## Tanda 18 — Validaciones / casos negativos · `18-negatives.cy.js` ✅

@@ -520,14 +520,18 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
   const [status, setStatus] = useState(org.subStatus || "trial");
   const [plan, setPlan] = useState(org.plan || "base");
   const [periodEnd, setPeriodEnd] = useState(org.currentPeriodEnd ? org.currentPeriodEnd.slice(0, 10) : "");
-  const [grace, setGrace] = useState(org.gracePeriodEndsAt ? org.gracePeriodEndsAt.slice(0, 10) : "");
+  const [graceDays, setGraceDays] = useState(org.graceDays ?? 0);
   const [notes, setNotes] = useState(org.adminNotes || "");
   const isDemo = org.tenantType === "demo";
+  // Fecha efectiva de gracia = vencimiento + días (solo informativa).
+  const graceUntil = periodEnd && Number(graceDays) > 0
+    ? new Date(new Date(periodEnd).getTime() + Number(graceDays) * 86400000).toISOString().slice(0, 10)
+    : periodEnd || null;
   function save() {
     runAction("set_subscription", {
       organization_id: org.id, status, plan,
       current_period_end: periodEnd || null,
-      grace_period_ends_at: grace || null,
+      grace_days: Number(graceDays) || 0,
       admin_notes: notes,
     }, "Suscripción actualizada.");
   }
@@ -545,7 +549,13 @@ function OrgSubscriptionTab({ org, busy, runAction }) {
         </select>
       </Field>
       <Field label="Vence (fin de periodo)"><input className="inp" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} /></Field>
-      <Field label="Gracia hasta (opcional)"><input className="inp" type="date" value={grace} onChange={(e) => setGrace(e.target.value)} /></Field>
+      <Field label="Días de gracia tras el vencimiento">
+        <input className="inp" data-cy="sub-grace-days" type="number" min={0} max={365} value={graceDays} onChange={(e) => setGraceDays(Number(e.target.value))} />
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+          Se aplica <b>después</b> del vencimiento (nunca antes) y se recalcula al registrar un pago.
+          {Number(graceDays) > 0 && graceUntil ? <> · Gracia hasta <b>{graceUntil}</b>.</> : null}
+        </div>
+      </Field>
       <Field label="Notas administrativas internas"><textarea className="inp" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-p" data-cy="sub-save" disabled={busy} onClick={save}>Guardar</button>

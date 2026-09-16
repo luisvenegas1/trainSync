@@ -24,4 +24,12 @@ describe("Plataforma — administración de orgs", () => {
     cy.get('[data-cy="sub-save"]').click();
     cy.contains("Suscripción actualizada", { timeout: 15000 }).should("be.visible");
   });
+
+  it("TC-45b Fijar días de gracia de la suscripción", () => {
+    openOrg("Gimnasio Pro");
+    cy.contains("button", "Suscripción").click();
+    cy.get('[data-cy="sub-grace-days"]', { timeout: 15000 }).clear().type("3");
+    cy.get('[data-cy="sub-save"]').click();
+    cy.contains("Suscripción actualizada", { timeout: 15000 }).should("be.visible");
+  });
 });

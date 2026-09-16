@@ -91,6 +91,22 @@ alineación del checkbox "Eximir del bloqueo". **Solo frontend.**
 
 ---
 
+## v1.10.3 — gracia de suscripción en días
+
+Cambio: la gracia de la suscripción (plataforma) pasa de fecha absoluta a **días
+después del vencimiento**; se recalcula sola al registrar un pago y nunca queda antes
+del vencimiento.
+
+- **BD:** correr en el SQL Editor de prod:
+  `supabase/migrations/20260915100000_subscription_grace_days.sql` (agrega `grace_days`).
+- **Edge Functions:** `supabase functions deploy platform-admin --no-verify-jwt`
+- **Frontend:** `git add -A && git commit -m "feat: gracia de suscripción en días (recalcula al pagar) (v1.10.3)" && git push`
+
+> Migración history: como ya está alineado, también podés hacer `supabase db push`
+> (aplicaría solo la nueva). O correrla a mano en el SQL Editor (es `add column if not exists`).
+
+---
+
 ## Smoke test post-deploy (en prod)
 
 Logueado como un coach Premium real:
