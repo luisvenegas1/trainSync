@@ -24,9 +24,11 @@ jobs:
       - name: Llamar a la función de recordatorios del SaaS
         run: |
           DRY="${{ github.event.inputs.dry_run }}"
-          URL="${{ secrets.SUPABASE_SAAS_FUNCTION_URL }}"
+          # Limpiar espacios/saltos de línea que a veces quedan pegados en el secret.
+          URL="$(printf '%s' "${{ secrets.SUPABASE_SAAS_FUNCTION_URL }}" | tr -d '[:space:]')"
+          if [ -z "$URL" ]; then echo "Falta el secret SUPABASE_SAAS_FUNCTION_URL"; exit 1; fi
           if [ "$DRY" = "1" ]; then URL="${URL}?dry_run=1"; fi
-          echo "POST $URL"
+          echo "POST (url oculta por seguridad)"
           curl -sS -X POST "$URL" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -w "\nHTTP %{http_code}\n" \
