@@ -1,0 +1,33 @@
+name: Recordatorios de pago del SaaS (TrainSync)
+
+# Dispara la Edge Function send-saas-reminders una vez al día.
+# La función decide a qué ENTRENADOR (dueño de tenant) avisarle según su suscripción
+# (recordatorio activo + X días antes del vencimiento) y evita duplicados. Acá solo la
+# "despertamos" con el secreto.
+
+on:
+  schedule:
+    # 13:05 UTC = 7:05 a.m. en Costa Rica (UTC-6). Unos minutos después del de clientes.
+    - cron: "5 13 * * *"
+  # Permite correrlo a mano desde la pestaña Actions de GitHub (botón "Run workflow").
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Correr sin enviar correos (1 = sí)"
+        required: false
+        default: "0"
+
+jobs:
+  send-saas-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar a la función de recordatorios del SaaS
+        run: |
+          DRY="${{ github.event.inputs.dry_run }}"
+          URL="${{ secrets.SUPABASE_SAAS_FUNCTION_URL }}"
+          if [ "$DRY" = "1" ]; then URL="${URL}?dry_run=1"; fi
+          echo "POST $URL"
+          curl -sS -X POST "$URL" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n" \
+            --fail-with-body
