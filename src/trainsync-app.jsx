@@ -3,9 +3,9 @@ import {
   getUsers, upsertUser, deleteUser,
   getExercises, upsertExercise, deleteExercise,
   getRoutines, upsertRoutine, deleteRoutine, setRoutineAssignments,
-  getMeasurements, upsertMeasurement, deleteMeasurement,
-  getPayments, upsertPayment, deletePayment,
-  getWorkoutSessions, upsertWorkoutSession, deleteWorkoutSession,
+  getMeasurements, getClientMeasurements, anyMeasurements, upsertMeasurement, deleteMeasurement,
+  getPayments, getClientPayments, upsertPayment, deletePayment,
+  getWorkoutSessions, getClientWorkoutSessions, upsertWorkoutSession, deleteWorkoutSession,
   getCatalogs, setCatalogCategory,
   getChallenges, saveChallenge as dbSaveChallenge, deleteChallenge as dbDeleteChallenge,
   setDataOrgScope,
@@ -55,6 +55,7 @@ function useAppData() {
   const [measurements, setMeasurementsState] = useState([]);
   const [payments, setPaymentsState] = useState([]);
   const [workoutSessions, setWorkoutSessionsState] = useState([]);
+  const [measurementsExist, setMeasurementsExist] = useState(false); // para el check de la Guía (coach carga perezoso)
   const [catalogOverrides, setCatalogOverrides] = useState({});
   const [challenges, setChallengesState] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,16 +64,29 @@ function useAppData() {
   // Carga inicial. Bajo RLS (modo supabase) cada consulta devuelve SOLO lo que el
   // usuario puede ver (su organización, o solo lo suyo si es cliente): no descarga
   // datos de otras organizaciones. En legacy (RLS off) devuelve todo como hoy.
-  const load = useCallback(async () => {
+  // eagerSessions=false → el coach NO baja todo el historial de entrenos de la org al
+  // inicio (escala): las sesiones se cargan por cliente (al abrir la ficha) o todas al
+  // abrir Retos. El CLIENTE y el superadmin las siguen cargando eager (RLS ya acota lo
+  // suyo en el caso del cliente).
+  const load = useCallback(async (opts = {}) => {
+    // eager=false → el coach NO baja todo lo pesado que ACUMULA con el tiempo (entrenos,
+    // mediciones, pagos); se carga por cliente al abrir la ficha (o todo en Retos). Las
+    // rutinas sí se cargan (crecen con la cantidad de clientes, no con el tiempo).
+    const eager = opts.eagerSessions !== false;
     try {
-      const [u, ex, rt, ms, pm] = await Promise.all([getUsers(), getExercises(), getRoutines(), getMeasurements(), getPayments()]);
+      const [u, ex, rt] = await Promise.all([getUsers(), getExercises(), getRoutines()]);
       if (u.length > 0) setUsersState(u);
       if (ex.length > 0) setExercisesState(ex);
       setRoutinesState(rt);
-      setMeasurementsState(ms);
-      setPaymentsState(pm);
-      try { const ws = await getWorkoutSessions(); setWorkoutSessionsState(ws); }
-      catch (e) { console.warn("Entrenamientos no disponibles (¿falta correr supabase-entrenamientos.sql?):", e); }
+      if (eager) {
+        try { const [ms, pm] = await Promise.all([getMeasurements(), getPayments()]); setMeasurementsState(ms); setPaymentsState(pm); setMeasurementsExist(ms.length > 0); }
+        catch (e) { console.warn("Mediciones/pagos no disponibles:", e); }
+        try { const ws = await getWorkoutSessions(); setWorkoutSessionsState(ws); }
+        catch (e) { console.warn("Entrenamientos no disponibles:", e); }
+      } else {
+        setMeasurementsState([]); setPaymentsState([]); setWorkoutSessionsState([]); // el coach los carga perezosamente
+        try { setMeasurementsExist(await anyMeasurements()); } catch { /* ignore */ }
+      }
       try { const cats = await getCatalogs(); setCatalogOverrides(cats); }
       catch (e) { console.warn("Catálogos no disponibles (¿falta correr supabase-catalogos.sql?):", e); }
       try { const chs = await getChallenges(); setChallengesState(chs); }
@@ -83,6 +97,40 @@ function useAppData() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Carga perezosa de las sesiones de UN cliente (al abrir su ficha) y las FUSIONA en
+  // el estado (dedupe por id), sin volver a bajar todo.
+  const loadClientSessions = useCallback(async (clientId) => {
+    if (!clientId) return;
+    try {
+      const ws = await getClientWorkoutSessions(clientId);
+      setWorkoutSessionsState((prev) => {
+        const map = new Map(prev.map((s) => [s.id, s]));
+        for (const s of ws) map.set(s.id, s);
+        return Array.from(map.values());
+      });
+    } catch (e) { console.warn("No se pudieron cargar los entrenos del cliente:", e); }
+  }, []);
+  // Todas las sesiones de la org (para Retos, que rankea entre clientes).
+  const loadAllSessions = useCallback(async () => {
+    try { const ws = await getWorkoutSessions(); setWorkoutSessionsState(ws); }
+    catch (e) { console.warn("No se pudieron cargar los entrenos:", e); }
+  }, []);
+  // Mediciones/pagos de UN cliente (al abrir su ficha), fusionados por id.
+  const loadClientMeasurements = useCallback(async (clientId) => {
+    if (!clientId) return;
+    try {
+      const rows = await getClientMeasurements(clientId);
+      setMeasurementsState((prev) => { const m = new Map(prev.map((x) => [x.id, x])); for (const r of rows) m.set(r.id, r); return Array.from(m.values()); });
+    } catch (e) { console.warn("No se pudieron cargar las mediciones del cliente:", e); }
+  }, []);
+  const loadClientPayments = useCallback(async (clientId) => {
+    if (!clientId) return;
+    try {
+      const rows = await getClientPayments(clientId);
+      setPaymentsState((prev) => { const m = new Map(prev.map((x) => [x.id, x])); for (const r of rows) m.set(r.id, r); return Array.from(m.values()); });
+    } catch (e) { console.warn("No se pudieron cargar los pagos del cliente:", e); }
   }, []);
 
   async function setUsers(newUsers) {
@@ -159,8 +207,10 @@ function useAppData() {
   return {
     exercises, users, routines, measurements, payments, workoutSessions, challenges,
     loading, dbError, load, catalogValue,
+    measurementsExist,
     setUsers, setExercises, setRoutines, setMeasurements, setPayments, setWorkoutSessions,
     saveRoutineAssignments, saveChallenge, deleteChallenge,
+    loadClientSessions, loadAllSessions, loadClientMeasurements, loadClientPayments,
   };
 }
 
@@ -181,15 +231,15 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
     hasRoutines: data.routines.length > 0,
     hasExercises: data.exercises.some((e) => e.visibility !== "global"),
     hasAssigned: data.routines.some((r) => (r.assignedUserIds || []).length > 0),
-    hasMeasurements: (data.measurements || []).length > 0,
+    hasMeasurements: data.measurementsExist,
   }} />;
   else if (isT) {
     if (page === "dashboard") content = <Dashboard users={data.users} routines={data.routines} />;
-    else if (page === "clients") content = <ClientsPage users={data.users} setUsers={data.setUsers} routines={data.routines} measurements={data.measurements} setMeasurements={data.setMeasurements} payments={data.payments} setPayments={data.setPayments} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} selectedClientId={null} />;
+    else if (page === "clients") content = <ClientsPage users={data.users} setUsers={data.setUsers} routines={data.routines} measurements={data.measurements} setMeasurements={data.setMeasurements} payments={data.payments} setPayments={data.setPayments} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} exercises={data.exercises} selectedClientId={null} loadClientSessions={data.loadClientSessions} loadClientMeasurements={data.loadClientMeasurements} loadClientPayments={data.loadClientPayments} />;
     else if (page === "routines") content = <RoutinesPage routines={data.routines} setRoutines={data.setRoutines} users={data.users} setUsers={data.setUsers} exercises={data.exercises} saveRoutineAssignments={data.saveRoutineAssignments} />;
     else if (page === "exercises") content = <ExercisesPage exercises={data.exercises} setExercises={data.setExercises} />;
     else if (page === "reminders") content = <RemindersPage />;
-    else if (page === "challenges") content = <ChallengesPage clients={data.users.filter((u) => u.role !== "trainer")} sessions={data.workoutSessions} challenges={data.challenges} routines={data.routines} onSaveChallenge={data.saveChallenge} onDeleteChallenge={data.deleteChallenge} />;
+    else if (page === "challenges") content = <ChallengesPage clients={data.users.filter((u) => u.role !== "trainer")} sessions={data.workoutSessions} challenges={data.challenges} routines={data.routines} onSaveChallenge={data.saveChallenge} onDeleteChallenge={data.deleteChallenge} loadAllSessions={data.loadAllSessions} />;
     else if (page === "admins") content = <AdminsPage />;
   } else {
     if (page === "my-routine") content = <MyRoutinePage user={liveUser} routines={data.routines} exercises={data.exercises} workoutSessions={data.workoutSessions} setWorkoutSessions={data.setWorkoutSessions} />;
@@ -210,7 +260,7 @@ function MainApp({ currentUser, capabilityRole = "owner", onLogout, data, isSupe
               clientsCount={data.users.filter((u) => u.role !== "trainer").length}
               routinesCount={data.routines.length}
               hasAssigned={data.routines.some((r) => (r.assignedUserIds || []).length > 0)}
-              hasMeasurements={(data.measurements || []).length > 0} />}
+              hasMeasurements={data.measurementsExist} />}
             {content}
             <AppFooter />
           </main>
@@ -327,7 +377,14 @@ function SupabaseApp() {
 
   // Acota TODAS las lecturas a la org del tenant actual antes de cargar. Clave para
   // el superadmin (RLS le deja ver todo): así solo ve los datos del tenant que abre.
-  useEffect(() => { if (ready) { setDataOrgScope(tenant?.org?.id || null); load(); } }, [ready, load, tenant]);
+  // El coach real carga las sesiones perezosamente (por cliente / en Retos). El cliente
+  // (RLS ya acota lo suyo) y el superadmin (herramienta de soporte) las cargan eager.
+  useEffect(() => {
+    if (ready) {
+      setDataOrgScope(tenant?.org?.id || null);
+      load({ eagerSessions: auth.capabilityRole === "client" || auth.isSuperadmin });
+    }
+  }, [ready, load, tenant, auth.capabilityRole, auth.isSuperadmin]);
 
   // Tenant demo SIN sesión → app de demostración pública (sin login, solo lectura).
   const isDemoTenant = tenant?.org?.tenant_type === "demo" || tenant?.slug === "titotrainer";

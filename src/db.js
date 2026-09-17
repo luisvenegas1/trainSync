@@ -271,6 +271,23 @@ export async function deleteExercise(id) {
 // ROUTINES (con días, grupos y ejercicios)
 // ═══════════════════════════════════════════
 
+// Trae filas por un conjunto de ids en LOTES, para no pasar del límite de largo de URL
+// de la API cuando hay muchos ids (rutinas grandes, muchos entrenos con muchos logs).
+// Todos los hijos de un mismo id caen en el mismo lote, así el orden por padre se conserva.
+async function selectByIds(table, column, ids, orderCol) {
+  if (!ids || !ids.length) return [];
+  const out = [];
+  const SIZE = 200;
+  for (let i = 0; i < ids.length; i += SIZE) {
+    let q = sb.from(table).select("*").in(column, ids.slice(i, i + SIZE));
+    if (orderCol) q = q.order(orderCol);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (data) out.push(...data);
+  }
+  return out;
+}
+
 export async function getRoutines() {
   // 1. Traer todas las rutinas (de la org actual; días/grupos/ejercicios se
   //    encadenan por id, así que basta con acotar las rutinas).
@@ -281,40 +298,10 @@ export async function getRoutines() {
   if (rErr) throw rErr;
   if (!routines.length) return [];
 
-  // 2. Traer todos los días de esas rutinas
-  const routineIds = routines.map((r) => r.id);
-  const { data: days, error: dErr } = await sb
-    .from("routine_days")
-    .select("*")
-    .in("routine_id", routineIds)
-    .order("sort_order");
-  if (dErr) throw dErr;
-
-  // 3. Traer todos los grupos
-  const dayIds = days.map((d) => d.id);
-  let groups = [];
-  if (dayIds.length) {
-    const { data: g, error: gErr } = await sb
-      .from("routine_groups")
-      .select("*")
-      .in("day_id", dayIds)
-      .order("sort_order");
-    if (gErr) throw gErr;
-    groups = g;
-  }
-
-  // 4. Traer todos los ejercicios de esos grupos
-  const groupIds = groups.map((g) => g.id);
-  let exercises = [];
-  if (groupIds.length) {
-    const { data: ex, error: exErr } = await sb
-      .from("routine_exercises")
-      .select("*")
-      .in("group_id", groupIds)
-      .order("sort_order");
-    if (exErr) throw exErr;
-    exercises = ex;
-  }
+  // 2-4. Días → grupos → ejercicios (en lotes para no reventar el largo de la URL).
+  const days = await selectByIds("routine_days", "routine_id", routines.map((r) => r.id), "sort_order");
+  const groups = await selectByIds("routine_groups", "day_id", days.map((d) => d.id), "sort_order");
+  const exercises = await selectByIds("routine_exercises", "group_id", groups.map((g) => g.id), "sort_order");
 
   // 5. Armar la estructura anidada
   const groupsWithEx = groups.map((g) => ({
@@ -333,7 +320,7 @@ export async function getRoutines() {
     const { data: assigns, error: aErr } = await sb
       .from("routine_assignments")
       .select("routine_id,user_id")
-      .in("routine_id", routineIds);
+      .in("routine_id", routines.map((r) => r.id));
     if (!aErr && assigns) {
       for (const a of assigns) {
         (assignMap[a.routine_id] = assignMap[a.routine_id] || []).push(a.user_id);
@@ -467,6 +454,27 @@ export async function getMeasurements() {
   return data.map(dbToMeasurement);
 }
 
+// Mediciones de UN cliente (carga perezosa desde la ficha).
+export async function getClientMeasurements(clientId) {
+  if (!clientId) return [];
+  const { data, error } = await scopeOrg(sb
+    .from("measurements")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("date", { ascending: false }));
+  if (error) throw error;
+  return (data || []).map(dbToMeasurement);
+}
+
+// ¿La org tiene AL MENOS una medición? (para el check de la Guía sin bajar todo).
+export async function anyMeasurements() {
+  const { count, error } = await scopeOrg(sb
+    .from("measurements")
+    .select("id", { count: "exact", head: true }));
+  if (error) return false;
+  return (count || 0) > 0;
+}
+
 export async function upsertMeasurement(m) {
   const { error } = await sb
     .from("measurements")
@@ -490,6 +498,18 @@ export async function getPayments() {
     .order("date", { ascending: false }));
   if (error) throw error;
   return data.map(dbToPayment);
+}
+
+// Pagos de UN cliente (carga perezosa desde la ficha).
+export async function getClientPayments(clientId) {
+  if (!clientId) return [];
+  const { data, error } = await scopeOrg(sb
+    .from("payments")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("date", { ascending: false }));
+  if (error) throw error;
+  return (data || []).map(dbToPayment);
 }
 
 export async function upsertPayment(p) {
@@ -543,14 +563,25 @@ export async function getWorkoutSessions() {
   if (!sessions.length) return [];
 
   const ids = sessions.map((s) => s.id);
-  const { data: logs, error: lErr } = await sb
-    .from("workout_logs")
-    .select("*")
-    .in("session_id", ids)
-    .order("sort_order");
-  if (lErr) throw lErr;
+  const logs = await selectByIds("workout_logs", "session_id", ids, "sort_order");
+  return sessions.map((s) => dbToSession(s, logs));
+}
 
-  return sessions.map((s) => dbToSession(s, logs || []));
+// Sesiones de UN cliente (para carga perezosa desde la ficha: el coach no baja todo
+// el historial de la org al inicio, solo el del cliente que abre).
+export async function getClientWorkoutSessions(clientId) {
+  if (!clientId) return [];
+  const { data: sessions, error: sErr } = await scopeOrg(sb
+    .from("workout_sessions")
+    .select("*")
+    .eq("user_id", clientId)
+    .order("started_at", { ascending: false }));
+  if (sErr) throw sErr;
+  if (!sessions.length) return [];
+
+  const ids = sessions.map((s) => s.id);
+  const logs = await selectByIds("workout_logs", "session_id", ids, "sort_order");
+  return sessions.map((s) => dbToSession(s, logs));
 }
 
 export async function upsertWorkoutSession(session) {

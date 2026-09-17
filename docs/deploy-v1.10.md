@@ -149,6 +149,43 @@ lo ve/descarga desde su sección "Dieta".
 
 ---
 
+## v1.11.1 — lazy-load por cliente para el coach (escala)
+
+Cambio interno de performance (invisible al usuario): el coach ya **no baja todo el
+historial de la org al iniciar**. Se cargan **por cliente**, al abrir su ficha:
+**entrenos, mediciones y pagos**. Las sesiones de **todos** los clientes se cargan solo
+al abrir Retos. Rutinas siguen eager (acotadas por # de clientes) y sus días/grupos/
+ejercicios/logs se traen en **lotes** (`.in()` de 200) para no reventar el largo de la
+URL. El cliente y el superadmin no cambian (cargan lo suyo como siempre).
+
+Además: **paginación reutilizable** (hook `usePagination` + componente `Pager`) en las
+cuatro tablas/listas largas del coach: **Clientes**, **Dashboard** (clientes
+habilitados), **Ejercicios** y **Rutinas**. El coach elige **10 / 25 / 50 / 100 por
+página** y navega con Anterior/Siguiente; el buscador o filtro y el cambio de tamaño
+resetean a la página 1. El tamaño elegido se **recuerda entre sesiones** y es
+**independiente por tabla** (localStorage, claves `ts_page_size_<clients|dashboard|
+exercises|routines>`; default 10 la primera vez) — así se puede ver Clientes de 50 y
+Ejercicios de 10. Esto alivia el DOM en orgs grandes (complementa el lazy-load de arriba).
+
+- **BD:** ninguna migración.
+- **Edge Functions:** ninguna.
+- **Frontend:** commit + push.
+
+> **Nota de alcance de la paginación:** hoy es **solo de render** (mejora fluidez/DOM,
+> NO reduce la descarga: la lista de clientes/ejercicios/rutinas se baja completa a
+> memoria). Es suficiente porque esas listas son livianas. **Idea futura (solo si un
+> tenant crece muchísimo):** paginación real contra la BD con `.range()` + búsqueda y
+> conteo server-side, para bajar menos filas por página. No implementado — no se ve
+> necesario aún.
+
+> Sube el techo de "decenas/cientos" de clientes a "miles" sin lentitud, y reduce el
+> riesgo del cap de filas. La Guía usa un conteo liviano (`anyMeasurements`) para el
+> check de mediciones, así el ✓ verde sigue correcto sin bajar todas las mediciones.
+> Correr la suite E2E (sobre todo tandas 08 workout y 09 retos, y flujos de ficha de
+> cliente: mediciones y pagos) para confirmar que el comportamiento visible es idéntico.
+
+---
+
 ## Smoke test post-deploy (en prod)
 
 Logueado como un coach Premium real:

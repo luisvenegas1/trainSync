@@ -112,10 +112,13 @@ function ClientAchievements({ clients, sessions, routines, pct }) {
 }
 
 // ── Config + retos del ENTRENADOR ────────────────────────────────
-export function ChallengesPage({ clients = [], sessions = [], challenges = [], routines = [], onSaveChallenge, onDeleteChallenge }) {
+export function ChallengesPage({ clients = [], sessions = [], challenges = [], routines = [], onSaveChallenge, onDeleteChallenge, loadAllSessions }) {
   const tenant = useTenant();
   const orgId = tenant?.org?.id || null;
   const { readOnly } = usePermissions();
+  // Retos rankea entre TODOS los clientes → asegurar que las sesiones de la org estén
+  // cargadas (el coach las trae perezosamente; acá se piden al abrir esta página).
+  useEffect(() => { if (loadAllSessions) loadAllSessions(); }, [loadAllSessions]);
   const g = tenant?.gamification || {};
   const [enabled, setEnabled] = useState(!!g.enabled);
   // Medallas por % del objetivo (días/semana de la rutina de cada cliente).

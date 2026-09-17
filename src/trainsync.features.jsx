@@ -23,6 +23,48 @@ import { PlanGate } from "./plans/PlanGate";
 const preventNegKey=e=>{if(["-","e","E","+"].includes(e.key))e.preventDefault();};
 const stripNeg=v=>String(v).replace(/-/g,"");
 
+// ── Paginación reutilizable (para listas largas: clientes, ejercicios, rutinas) ──
+// Recibe el arreglo YA filtrado y devuelve la "página" a pintar + los controles.
+// `resetKey` (ej. el texto de búsqueda o un filtro) vuelve a la página 1 al cambiar.
+function usePagination(items,{defaultSize=10,resetKey="",storageKey="default"}={}){
+  // Tamaño de página RECORDADO entre sesiones (localStorage), CON CLAVE POR TABLA:
+  // así el coach puede ver Clientes de 50 y Ejercicios de 10 de forma independiente.
+  const[pageSize,setPageSizeRaw]=useLS("ts_page_size_"+storageKey,defaultSize);
+  const[pageNum,setPageNum]=useState(1);
+  // Patrón "ajustar estado en render" (React docs): al cambiar el filtro/búsqueda
+  // volvemos a la página 1 sin useEffect.
+  const[prevKey,setPrevKey]=useState(resetKey);
+  if(prevKey!==resetKey){setPrevKey(resetKey);setPageNum(1);}
+  const total=items.length;
+  const totalPages=Math.max(1,Math.ceil(total/pageSize));
+  const page=Math.min(pageNum,totalPages); // clamp si el filtro achicó la lista
+  const start=(page-1)*pageSize;
+  const paged=items.slice(start,start+pageSize);
+  const setPageSize=n=>{setPageSizeRaw(n);setPageNum(1);};
+  return{paged,total,page,totalPages,pageSize,setPageSize,setPageNum,start};
+}
+
+// Barra de paginación: dropdown 25/50/100 + rango + anterior/siguiente.
+function Pager({pg}){
+  const{total,page,totalPages,pageSize,setPageSize,setPageNum,start}=pg;
+  if(total===0)return null;
+  return(<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginTop:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#6B7A99"}}>
+      <span>Mostrar</span>
+      <select className="sel" style={{width:82,flexShrink:0}} value={pageSize} onChange={e=>setPageSize(Number(e.target.value))}>
+        <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+      </select>
+      <span>por página</span>
+    </div>
+    <div style={{fontSize:12,color:"#6B7A99"}}>{start+1}–{Math.min(start+pageSize,total)} de {total}</div>
+    {totalPages>1&&<div style={{display:"flex",alignItems:"center",gap:6}}>
+      <button className="btn btn-g" style={{padding:"4px 10px"}} disabled={page<=1} onClick={()=>setPageNum(page-1)}>‹ Anterior</button>
+      <span style={{fontSize:12,color:"#0B1F4B",fontWeight:700}}>Página {page} / {totalPages}</span>
+      <button className="btn btn-g" style={{padding:"4px 10px"}} disabled={page>=totalPages} onClick={()=>setPageNum(page+1)}>Siguiente ›</button>
+    </div>}
+  </div>);
+}
+
 export function Dashboard({users}){
   const clients=users.filter(u=>u.role==="user");
   const enabled=clients.filter(u=>!u.disabled);
@@ -31,6 +73,7 @@ export function Dashboard({users}){
   const active=enabled.filter(u=>getPlanStatus(u.plan)==="Activo").length;
   const expiring=enabled.filter(u=>{const d=daysLeft(u.plan?.endDate);return d!==null&&d>=0&&d<=30}).length;
   const expired=enabled.filter(u=>getPlanStatus(u.plan)==="Vencido").length;
+  const pg=usePagination(enabled,{storageKey:"dashboard"});
   return(<div>
     <div className="ph">
       <div><div className="pt">Dashboard</div><div className="ps">Panel de control</div></div>
@@ -48,7 +91,7 @@ export function Dashboard({users}){
       </div>
       <div className="tbl-wrap"><table className="tbl">
         <thead><tr><th>Cliente</th><th>Plan</th><th>Modalidad</th><th>Vence</th><th>Estado</th></tr></thead>
-        <tbody>{enabled.map(u=>{
+        <tbody>{pg.paged.map(u=>{
           const st=getPlanStatus(u.plan);
           const d=daysLeft(u.plan?.endDate);
           return(<tr key={u.id}>
@@ -60,6 +103,7 @@ export function Dashboard({users}){
           </tr>);
         })}{enabled.length===0&&<tr><td colSpan={5}><div className="empty"><div className="ico">👥</div><p>Sin clientes habilitados</p></div></td></tr>}</tbody>
       </table></div>
+      <div style={{padding:"0 12px 10px"}}><Pager pg={pg}/></div>
     </div>
 
     {disabled.length>0&&<div className="card" style={{padding:0}}>
@@ -805,8 +849,15 @@ export function MyDietPage(){
 }
 
 // ── CLIENT DETAIL ──
-export function ClientDetail({client,setClient,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,routines,onBack,onDelete,deleteConfirm,setDeleteConfirm,doDelete}){
+export function ClientDetail({client,setClient,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,loadClientSessions,loadClientMeasurements,loadClientPayments,routines,onBack,onDelete,deleteConfirm,setDeleteConfirm,doDelete}){
   const{readOnly,features}=usePermissions();
+  // Carga perezosa: al abrir la ficha, traer sesiones/mediciones/pagos de ESTE cliente
+  // (el coach no baja todo el historial de la org al inicio). El cliente/superadmin ya los tienen.
+  useEffect(()=>{
+    if(loadClientSessions)loadClientSessions(client.id);
+    if(loadClientMeasurements)loadClientMeasurements(client.id);
+    if(loadClientPayments)loadClientPayments(client.id);
+  },[client.id,loadClientSessions,loadClientMeasurements,loadClientPayments]);
   const[tab,setTab]=useState("info");
   const[showEditInfo,setShowEditInfo]=useState(false);
   const[cForm,setCForm]=useState({...client});
@@ -994,7 +1045,7 @@ export function ClientDetail({client,setClient,measurements,setMeasurements,paym
 }
 
 // ── CLIENTS LIST ──
-export function ClientsPage({users,setUsers,routines,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,selectedClientId}){
+export function ClientsPage({users,setUsers,routines,measurements,setMeasurements,payments=[],setPayments,workoutSessions=[],setWorkoutSessions,selectedClientId,loadClientSessions,loadClientMeasurements,loadClientPayments}){
   const cat=useCatalogs();
   const{readOnly}=usePermissions();
   const tenant=useTenant();
@@ -1046,6 +1097,13 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
     }catch(e){console.error(e);setToast({msg:ERR,type:"err"});setDeleteConfirm(null);}
   }
 
+  // Filtrado por búsqueda + paginación (para listas largas, ej. 200+ clientes).
+  // Los hooks deben ir ANTES de cualquier return condicional (regla de hooks).
+  const q=search.toLowerCase();
+  const filtered=users.filter(u=>u.name.toLowerCase().includes(q)||u.username.toLowerCase().includes(q));
+  const pg=usePagination(filtered,{resetKey:q,storageKey:"clients"});
+  const{paged,total}=pg;
+
   const activeDetail=selectedClientId?users.find(u=>u.id===selectedClientId)||null:detail;
 
   if(activeDetail){
@@ -1059,6 +1117,9 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
       setPayments={setPayments}
       workoutSessions={workoutSessions}
       setWorkoutSessions={setWorkoutSessions}
+      loadClientSessions={loadClientSessions}
+      loadClientMeasurements={loadClientMeasurements}
+      loadClientPayments={loadClientPayments}
       routines={routines}
       onBack={()=>setDetail(null)}
       onDelete={()=>confirmDelete(live)}
@@ -1067,6 +1128,7 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
       doDelete={doDelete}
     />;
   }
+
   return(<div>
     {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
     <div className="ph"><div><div className="pt">Clientes</div><div className="ps">{users.length} clientes</div></div>{!readOnly&&<button className="btn btn-p" onClick={()=>setShowAdd(true)}>+ Nuevo</button>}</div>
@@ -1074,7 +1136,7 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
     <div className="card" style={{padding:0}}>
       <div className="tbl-wrap"><table className="tbl">
         <thead><tr><th>Cliente</th><th>Plan</th><th>Modalidad</th><th>Vence</th><th>Estado</th></tr></thead>
-        <tbody>{users.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())||u.username.toLowerCase().includes(search.toLowerCase())).map(u=>{
+        <tbody>{paged.map(u=>{
           const st=getPlanStatus(u.plan);
           const dl=daysLeft(u.plan?.endDate);
           return(<tr key={u.id} style={{cursor:"pointer"}} onClick={()=>setDetail(u)}>
@@ -1084,9 +1146,10 @@ export function ClientsPage({users,setUsers,routines,measurements,setMeasurement
             <td style={{fontSize:11}}>{fmtDate(u.plan?.endDate)}{dl!==null&&dl>=0&&dl<=15&&<span style={{color:"#F57C00",fontWeight:700}}> ⚠</span>}</td>
             <td>{u.disabled?<span className="badge bd-red">🚫 Deshabilitado</span>:<span className={`badge ${st==="Activo"?"bd-green":st==="Vencido"?"bd-red":"bd-gray"}`}>{st}</span>}</td>
           </tr>);
-        })}{users.filter(u=>u.name.toLowerCase().includes(search.toLowerCase())||u.username.toLowerCase().includes(search.toLowerCase())).length===0&&<tr><td colSpan={5}><div className="empty"><div className="ico">🔍</div><p>{search?"Sin resultados para \""+search+"\"":"Sin clientes"}</p></div></td></tr>}</tbody>
+        })}{total===0&&<tr><td colSpan={5}><div className="empty"><div className="ico">🔍</div><p>{search?"Sin resultados para \""+search+"\"":"Sin clientes"}</p></div></td></tr>}</tbody>
       </table></div>
     </div>
+    <Pager pg={pg}/>
     {showAdd&&<Modal title="Nuevo cliente" onClose={()=>setShowAdd(false)}>
       {err&&<div className="err">{err}</div>}
       <div style={{fontSize:11,fontWeight:700,color:"#6B7A99",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Datos personales</div>
@@ -1143,6 +1206,7 @@ export function ExercisesPage({exercises,setExercises}){
   const[saving,wrap]=useSaving();
   const ERR="Hubo un problema al guardar. Intentá de nuevo en unos minutos.";
   const list=exercises.filter(e=>e.type===tab&&(filter==="Todos"||e.muscleGroup===filter)&&e.name.toLowerCase().includes(search.toLowerCase()));
+  const pg=usePagination(list,{resetKey:tab+"|"+filter+"|"+search.toLowerCase(),storageKey:"exercises"});
   function openAdd(){setForm({name:"",videoUrl:"",muscleGroup:"Piernas",type:tab,equipment:"Ninguno"});setEditing(null);setShowAdd(true)}
   function openEdit(ex){setForm({name:ex.name,videoUrl:ex.videoUrl||"",muscleGroup:ex.muscleGroup,type:ex.type,equipment:ex.equipment||"Ninguno"});setEditing(ex);setShowAdd(true)}
   async function save(){
@@ -1172,12 +1236,13 @@ export function ExercisesPage({exercises,setExercises}){
     <div className="chips">{groups.map(g=><button key={g} className={`chip${filter===g?" on":""}`} onClick={()=>setFilter(g)}>{g}</button>)}</div>
     <div className="card" style={{padding:0}}>
       <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Ejercicio</th><th>Músculo</th><th>Equipo</th><th>Video</th><th></th></tr></thead>
-      <tbody>{list.map(ex=>(<tr key={ex.id}>
+      <tbody>{pg.paged.map(ex=>(<tr key={ex.id}>
         <td><strong>{ex.name}</strong></td><td><span className="badge bd-blue">{ex.muscleGroup}</span></td><td><span className="badge bd-gray">{ex.equipment||"Ninguno"}</span></td>
         <td>{ex.videoUrl?<button className="vbtn" onClick={()=>setVideoEx(ex)}>▶</button>:<span style={{color:"#6B7A99",fontSize:10}}>—</span>}</td>
         <td style={{whiteSpace:"nowrap"}}><button className="ibtn" onClick={()=>openEdit(ex)}>✏️</button>{!readOnly&&<button className="ibtn d" onClick={()=>del(ex.id)}>🗑</button>}</td>
       </tr>))}{list.length===0&&<tr><td colSpan={5}><div className="empty"><div className="ico">🏋️</div><p>Sin ejercicios</p></div></td></tr>}</tbody></table></div>
     </div>
+    <Pager pg={pg}/>
     {showAdd&&<Modal title={editing?"Editar ejercicio":"Nuevo ejercicio"} onClose={()=>setShowAdd(false)}>
       <div className="fg"><label>Nombre</label><input className="inp" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nombre del ejercicio"/></div>
       <div className="fr2">
@@ -1447,6 +1512,7 @@ export function RoutinesPage({routines,setRoutines,users,setUsers,exercises,save
       }
       return new Date(b.createdAt||b.updatedAt||0)-new Date(a.createdAt||a.updatedAt||0);
     });
+  const pg=usePagination(filtered,{resetKey:filterUser,storageKey:"routines"});
 
   if(editing!==null)return<RoutineEditor routine={editing==="__new__"?null:editing} exercises={exercises} users={users} onSave={(rt,activeIds)=>wrap(()=>saveRoutine(rt,activeIds))} saving={saving} onBack={()=>setEditing(null)}/>;
   return(<div>
@@ -1459,7 +1525,7 @@ export function RoutinesPage({routines,setRoutines,users,setUsers,exercises,save
       </select>
       {filterUser!=="__all__"&&<button onClick={()=>setFilterUser("__all__")} style={{fontSize:12,color:"#6B7A99",background:"none",border:"none",cursor:"pointer",padding:"4px 8px"}}>✕ Limpiar</button>}
     </div>
-    {filtered.map(rt=>{
+    {pg.paged.map(rt=>{
     const assigned=(rt.assignedUserIds||[]).map(id=>users.find(u=>u.id===id)).filter(Boolean);
     const totalEx=rt.days?.reduce((s,d)=>s+d.groups.reduce((ss,g)=>ss+g.exercises.length,0),0)||0;
     const filterU=filterUser!=="__all__"?users.find(u=>u.id===filterUser):null;
@@ -1493,6 +1559,7 @@ export function RoutinesPage({routines,setRoutines,users,setUsers,exercises,save
       </div>
     </div>);})}
     {filtered.length===0&&<div className="card"><div className="empty"><div className="ico">📋</div><p>{filterUser==="__all__"?"Sin rutinas":"Este cliente no tiene rutinas"}</p></div></div>}
+    <Pager pg={pg}/>
   </div>);
 }
 
